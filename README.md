@@ -80,25 +80,59 @@ This enforces **identity before visibility** and **authorization before connecti
 - **Protected Services**
   - Application servers, APIs, IoT/OT devices, or internal apps hidden behind NHP.
 
-### Mermaid Diagram
-
 ```mermaid
 flowchart LR
-    subgraph ClientHost[Client Host]
-        App[Application] -->|DNS query| OSResolver[OS Stub Resolver]
-        OSResolver -->|UDP/TCP 53| StealthDNS[StealthDNS\n(local DNS + NHP client)]
+    subgraph Host[Client or endpoint]
+        App[Application] --> OSRes[OS stub resolver]
+        OSRes --> SDNS[StealthDNS local DNS and NHP client]
     end
 
-    StealthDNS -->|Bypass domains| UpstreamDNS[Upstream DNS\n(DoH/DoT/Traditional)]
+    SDNS -->|Bypass queries| UpDNS[Upstream DNS resolver]
+    SDNS -->|NHP protocol| NHPController[NHP Controller / AC]
 
-    StealthDNS -->|NHP knock\n(OpenNHP)| NHPController[NHP Controller / AC]
+    NHPController -->|Allow and mapping| SDNS
+    NHPController -->|Deny| SDNS
 
-    NHPController -->|Policy allow +\nEphemeral mapping| StealthDNS
-    NHPController -->|Policy deny| StealthDNS
+    NHPController -->|Authorized sessions| ProtectedSvc[Protected service]
 
-    StealthDNS -->|DNS answer\n(A/AAAA/SRV)| OSResolver
-    OSResolver --> App
+    App -->|Connect via resolved IP and port| ProtectedSvc
+```
 
-    NHPController -->|Authorized session| ProtectedSvc[Protected Service\n(App / API / IoT)]
+### Sequence Diagram
 
-    App -->|Connect via resolved IP/Port| ProtectedSvc
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant OS as OS stub resolver
+    participant SDNS as StealthDNS local resolver
+    participant NHP as NHP Controller / AC
+    participant SVC as Protected service
+    participant UpDNS as Upstream DNS
+
+    App->>OS: DNS query app.internal.example.com
+    OS->>SDNS: UDP/TCP 53 query
+
+    Note over SDNS: Policy evaluation\nprotected / bypass / block
+
+    alt Domain is NHP-protected
+        SDNS->>NHP: NHP knock (identity, device, context)
+        NHP-->>SDNS: Decision and ephemeral mapping
+        alt Policy allow
+            SDNS-->>OS: DNS answer (A/AAAA/SRV)
+            OS-->>App: Resolved address
+            App->>SVC: TCP/TLS connection
+            SVC-->>App: Application traffic
+        else Policy deny
+            SDNS-->>OS: NXDOMAIN or SERVFAIL
+            OS-->>App: Resolution failed
+        end
+    else Domain is bypass
+        SDNS->>UpDNS: Forward to upstream DNS
+        UpDNS-->>SDNS: DNS answer
+        SDNS-->>OS: DNS answer
+        OS-->>App: Resolved address
+    else Domain is blocked
+        SDNS-->>OS: NXDOMAIN or sinkhole
+        OS-->>App: Resolution failed
+    end
+```
