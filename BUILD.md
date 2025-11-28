@@ -1,0 +1,116 @@
+## 1 Compilation and Execution
+
+### 1.1 Go Environment Setup
+
+Go Language environment: **Go 1.24.10** . Installation package download: <https://go.dev/dl/>
+- **Windows and macOS** Environment, install Go through the downloaded installer.
+- **Linux** environment can be installed directly through the management tool: `sudo apt install golang`.Alternatively, perform a manual installation using the following commands:
+
+     ```sh
+  1. sudo apt-get update
+  2. wget https://go.dev/dl/go1.24.10.linux-amd64.tar.gz
+  3. sudo tar -xvf go1.24.10.linux-amd64.tar.gz
+  4. sudo mv go /usr/local
+  5. export GOROOT=/usr/local/go
+  6. export GOPATH=$HOME/go
+  7. export PATH=$GOPATH/bin:$GOROOT/bin:$PATH
+  8. source ~/.profile
+  ```
+
+- After the installation is successful, run the command `go version`to see the Go version number.
+
+### 1.2 Compilation
+
+- **Windows**: Compile the project by executing the batch file `build.bat` located in the project root directory.
+- **Linux and macOS**: Compile the project by running the `make` command in the project root directory.
+- The compiled executable files are generated in the `release/` subdirectory.
+- Configuration files are placed in the `release/etc/` subdirectory. These files are copied from the `etc/` subdirectory during the build process.
+
+### 1.3 Configuration Files
+
+- dns.toml
+
+  ```tom
+  # StealthDNS base config
+  # field with (-) does not support dynamic update
+  
+  # UpstreamDNS (-): upstream DNS server. Parse non-NHP related DNS requests and domain names returned by the nhp-server.
+  # SetSystemDNS (-): automatically configure system DNS. Requires administrator rights and SetSystemDNS to be true. Otherwise, manually set the primary DNS to 127.0.0.1.
+  # RemoveLocalDNS (-): Remove local DNS proxy. Deletes the 127.0.0.1 DNS proxy after it is set, if RemoveLocalDNS is true.
+  # LogLevel: 0: silent, 1: error, 2: info, 3: audit, 4: debug, 5: trace.
+  UpstreamDNS = "8.8.8.8"
+  SetSystemDNS = true
+  RemoveLocalDNS = true
+  LogLevel = 4
+  ```
+
+- agent.toml
+
+  ```toml
+  # NHP-Agent base config
+  # field with (-) does not support dynamic update
+  
+  # PrivateKeyBase64 (-): agent private key in base64 format.
+  # TEEPrivateKeyBase64 (-): TEE private key in base64 format.
+  # DefaultCipherScheme: 0: gmsm, 1: curve25519.
+  # UserId: specify the user id this agent represents.
+  # OrganizationId: specify the organization id this agent represents.
+  # LogLevel: 0: silent, 1: error, 2: info, 3: audit, 4: debug, 5: trace.
+  PrivateKeyBase64 = "+Jnee2lP6Kn47qzSaqwSmWxORsBkkCV6YHsRqXCegVo="
+  DefaultCipherScheme = 1
+  UserId = "agent-0"
+  OrganizationId = "opennhp.cn"
+  # UserData: a customized user entry for flexibility.
+  # Its key-value pairs will be send to server along with knock message.
+  [UserData]
+  "ExampleKey0" = "StringValue"
+  "ExampleKey1" = 1
+  "ExampleKey2" = true
+  ```
+
+
+
+- server.toml
+
+  ```to
+  # list the server peers for the agent under [[Servers]] table
+  
+  # Hostname: the domain of the server peer. If specified, it overrides the "Ip" field with its first resolved address.
+  # Ip: specify the ip address of the server peer
+  # Port: specify the port number of this server peer is listening
+  # PubKeyBase64: public key of the server peer in base64 format
+  # ExpireTime (epoch timestamp in seconds): peer key validation will fail when it expires.
+  [[Servers]]
+  Hostname = ""
+  Ip = "172.16.3.54"
+  Port = 62206
+  PubKeyBase64 = "WqJxe+Z4+wLen3VRgZx6YnbjvJFmptz99zkONCt/7gc="
+  ExpireTime = 1924991999
+  ```
+
+
+
+- resource.toml
+
+  ```toml
+  # List resources for the agent to knock automatically after launch
+  
+  # AuthServiceId: id of the authentication and authorization service provider the resource belongs to.
+  # ResourceId: id of the resource group.
+  # ServerHostname: host name of the NHP server that manages this resource group.
+  # ServerIp: ip address of the NHP server  that manages this resource group.
+  # ServerPort: port of the NHP server that manages this resource group.
+  # NOTE: ServerHostname, ServerIp and ServerPort must match with the Hostname, Ip and Port of the server defined
+  # in server.toml in order for the program to locate the correct server peer
+  [[Resources]]
+  AuthServiceId = "example"
+  ResourceId = "demo"
+  ServerHostname = ""
+  ServerIp = "172.16.3.54"
+  ServerPort = 62206
+  ```
+
+### 1.4 Execution
+
+- **Windows**: Run the program with Administrator privileges. If running without Administrator rights, manually change the system DNS configuration: add `127.0.0.1` as the primary or sole DNS server to ensure domain name resolution is routed through the StealthDNS proxy service.
+- **Linux and macOS**: Run the program using the `sudo` command or as the `root` user. Otherwise, the StealthDNS service will be unable to listen on port 53, and the DNS proxy address `127.0.0.1` cannot be added.
