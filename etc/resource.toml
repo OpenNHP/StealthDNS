@@ -1,0 +1,15 @@
+# List resources for the agent to knock automatically after launch
+
+# AuthServiceId: id of the authentication and authorization service provider the resource belongs to.
+# ResourceId: id of the resource group.
+# ServerHostname: host name of the NHP server that manages this resource group.
+# ServerIp: ip address of the NHP server  that manages this resource group.
+# ServerPort: port of the NHP server that manages this resource group.
+# NOTE: ServerHostname, ServerIp and ServerPort must match with the Hostname, Ip and Port of the server defined
+# in server.toml in order for the program to locate the correct server peer
+[[Resources]]
+AuthServiceId = "example"
+ResourceId = "demo"
+ServerHostname = ""
+ServerIp = "172.16.3.54"
+ServerPort = 62206
