@@ -46,7 +46,7 @@ Go语言环境：**1.24.10**。安装包下载地址：<https://go.dev/dl/>
   LogLevel = 4
   ```
 
-- agent.toml
+- config.toml
 
   ```toml
   # NHP-Agent base config
@@ -62,6 +62,7 @@ Go语言环境：**1.24.10**。安装包下载地址：<https://go.dev/dl/>
   DefaultCipherScheme = 1
   UserId = "agent-0"
   OrganizationId = "opennhp.cn"
+  LogLevel = 4
   # UserData: a customized user entry for flexibility.
   # Its key-value pairs will be send to server along with knock message.
   [UserData]
@@ -112,9 +113,26 @@ Go语言环境：**1.24.10**。安装包下载地址：<https://go.dev/dl/>
   ServerPort = 62206
   ```
 
-  
 
-### 1.4 程序运行
+
+
+### 1.4 nhp-agent SDK
+
+StealthDNS通过调用nhp-agent SDK完成访问资源的敲门过程，在项目`sdk\`中各系统对应的SDK文件如下：
+
+- windows: nhp-agent.dll
+- linux: nhp-agent.so
+- macOS: nhp-agent.dylib
+
+通过`build.bat`(windows)/`make`(linux&macOS)编译程序会自动将SDK文件复制到`release\sdk\`，编译后直接在`release`运行可执行程序。
+
+
+
+如需更新SDK文件，请参照`https://github.com/OpenNHP/opennhp`中的文档完成新的SDK文件编译，并将编译后的文件放到项目`sdk\`中。
+
+
+
+### 1.5 程序运行
 
 - **Windows**环境下使用管理员账号运行程序，非管理员账号运行需手动更改系统DNS配置，增加DNS：127.0.0.1作为主DNS或唯一DNS，以确保系统进行域名解析时能正常走代理服务StealthDNS。
 - **Linux与macOS**环境下使用`sudo`指令或root账号来运行程序，否则StealthDNS服务将无法监听53端口，同时不能增加DNS代理地址127.0.0.1。

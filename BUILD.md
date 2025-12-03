@@ -44,7 +44,7 @@ Go Language environment: **Go 1.24.10** . Installation package download: <https:
   LogLevel = 4
   ```
 
-- agent.toml
+- config.toml
 
   ```toml
   # NHP-Agent base config
@@ -60,6 +60,7 @@ Go Language environment: **Go 1.24.10** . Installation package download: <https:
   DefaultCipherScheme = 1
   UserId = "agent-0"
   OrganizationId = "opennhp.cn"
+  LogLevel = 4
   # UserData: a customized user entry for flexibility.
   # Its key-value pairs will be send to server along with knock message.
   [UserData]
@@ -110,7 +111,25 @@ Go Language environment: **Go 1.24.10** . Installation package download: <https:
   ServerPort = 62206
   ```
 
-### 1.4 Execution
+
+
+### 1.4 nhp-agent SDK
+
+StealthDNS initiates the knock process for accessing resources by calling the nhp-agent SDK. The SDK files for each system in the project `sdk\` are as follows:
+
+- Windows: nhp-agent.dll
+- Linux: [nhp-agent.so](https://nhp-agent.so/)
+- macOS: nhp-agent.dylib
+
+Compiling the program with `build.bat` (Windows) or `make` (Linux & macOS) will automatically copy the SDK files to `release\sdk\`. After compilation, the executable can be run directly in `release`.
+
+If updates to the SDK files are needed, please refer to the documentation in `https://github.com/OpenNHP/opennhp` to compile new SDK files, and place the compiled files in the project `sdk\`.
+
+
+
+
+
+### 1.5 Execution
 
 - **Windows**: Run the program with Administrator privileges. If running without Administrator rights, manually change the system DNS configuration: add `127.0.0.1` as the primary or sole DNS server to ensure domain name resolution is routed through the StealthDNS proxy service.
 - **Linux and macOS**: Run the program using the `sudo` command or as the `root` user. Otherwise, the StealthDNS service will be unable to listen on port 53, and the DNS proxy address `127.0.0.1` cannot be added.

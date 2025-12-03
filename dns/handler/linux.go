@@ -2,10 +2,9 @@ package handler
 
 import (
 	"bufio"
+	"github.com/OpenNHP/opennhp/nhp/log"
 	"os"
 	"strings"
-
-	"github.com/OpenNHP/opennhp/nhp/log"
 )
 
 const (

@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -20,7 +21,7 @@ import (
 
 // ProxyService dns proxy service
 type ProxyService struct {
-	nhpAgent *agent.UdpAgent
+	nhpAgent agent.NhpAgent
 
 	dnsManager *Manager
 	config     *Config
@@ -40,6 +41,9 @@ type ProxyService struct {
 	domainMap     map[string]string
 	domainMapLock sync.Mutex
 
+	resourceMap     map[string]*Resource
+	resourceMapLock sync.Mutex
+
 	running atomic.Bool
 }
 
@@ -57,16 +61,25 @@ func (p *ProxyService) Start(dirPath string, logLevel int) (err error) {
 	}
 	p.dnsCache = NewStealthDNSCache(time.Duration(10) * time.Second)
 
-	p.dnsManager = NewDNSManager(p.config.RemoveLocalDNS)
-	if !p.dnsManager.SetStealthDNS() {
-		log.Warning("Stealth DNS setup failed. Please ensure the DNS proxy address 127.0.0.1 is set as the alternate DNS.")
-	}
-	p.nhpAgent = &agent.UdpAgent{}
-	err = p.nhpAgent.Start()
+	err = p.loadResources()
 	if err != nil {
 		return err
 	}
 
+	p.dnsManager = NewDNSManager(p.config.RemoveLocalDNS)
+	if !p.dnsManager.SetStealthDNS() {
+		log.Warning("Stealth DNS setup failed. Please ensure the DNS proxy address 127.0.0.1 is set as the alternate DNS.")
+	}
+	fmt.Println(dirPath)
+	p.nhpAgent, err = agent.NewNhpAgent(dirPath)
+	if err != nil {
+		log.Error("init nhp-agent fail: %v", err)
+		return err
+	}
+	err = p.nhpAgent.AgentInit(dirPath, logLevel)
+	if err != nil {
+		return err
+	}
 	listenAddr := fmt.Sprintf("%s:%d", common.StealthDnsIp, common.DnsUdpPort)
 
 	p.server = &dns.Server{
@@ -100,7 +113,7 @@ func (p *ProxyService) Stop() {
 
 	log.Debug("stop Stealth DNS")
 	if p.nhpAgent != nil {
-		p.nhpAgent.Stop()
+		p.nhpAgent.AgentClose()
 	}
 
 	if p.server != nil {
@@ -234,19 +247,21 @@ func (p *ProxyService) queryUpstream(domain string, qtype uint16) (*dns.Msg, err
 }
 
 func (p *ProxyService) knock(resId string) (ackMsg *com.ServerKnockAckMsg, err error) {
-	var target *agent.KnockTarget
-	if len(resId) > 0 {
-		target = p.nhpAgent.FindKnockTargetByResourceId(resId)
-	} else {
-		target = p.nhpAgent.GetFirstKnockTarget()
-	}
-
-	if target == nil {
+	if target, ok := p.resourceMap[resId]; !ok {
 		log.Warning("unknow resource [%s],", resId)
 		return nil, nil
+	} else {
+		resource, err := p.nhpAgent.AgentKnockResource(target.AuthServiceId, target.ResourceId, target.ServerIp, target.ServerHostname, target.ServerPort)
+		if err != nil {
+			return nil, err
+		}
+		err = json.Unmarshal([]byte(resource), &ackMsg)
+		if err != nil {
+			return nil, err
+		}
+		//
+		return ackMsg, nil
 	}
-	//
-	return p.nhpAgent.Knock(target)
 }
 
 func (p *ProxyService) noAnswer(w dns.ResponseWriter, r *dns.Msg) {
