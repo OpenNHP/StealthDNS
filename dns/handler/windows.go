@@ -25,6 +25,7 @@ type WindowsHandler struct {
 	backupDNS     []string
 	upstreamDNS   string
 	codePage      uint32
+	dhcpEnabled   bool
 }
 
 type NetworkAdapter struct {
@@ -38,6 +39,7 @@ type NetworkAdapterConfig struct {
 	SettingID            string   `wmi:"SettingID"`
 	DNSServerSearchOrder []string `wmi:"DNSServerSearchOrder"`
 	IPEnabled            bool     `wmi:"IPEnabled"`
+	DHCPEnabled          bool     `wmi:"DHCPEnabled"`
 }
 
 type WinInterInfo struct {
@@ -183,7 +185,7 @@ func (h *WindowsHandler) getActiveInterfacesWithMetric() ([]WinInterInfo, error)
 }
 
 // Get the interface with the lowest metric (highest priority)
-func (h *WindowsHandler) getPrimaryInterface(interMap map[string][]string) error {
+func (h *WindowsHandler) getPrimaryInterface(interMap map[string]*NetworkAdapterConfig) error {
 	interfaces, err := h.getActiveInterfacesWithMetric()
 	if err != nil {
 		return err
@@ -196,10 +198,11 @@ func (h *WindowsHandler) getPrimaryInterface(interMap map[string][]string) error
 		return interfaces[i].Metric < interfaces[j].Metric
 	})
 	for _, interfaceInfo := range interfaces {
-		if dnsList, ok := interMap[interfaceInfo.Name]; ok {
+		if networkConfig, ok := interMap[interfaceInfo.Name]; ok {
 			h.interfaceName = interfaceInfo.Name
 			h.backupDNS = make([]string, 0)
-			for _, dnsIp := range dnsList {
+			h.dhcpEnabled = networkConfig.DHCPEnabled
+			for _, dnsIp := range networkConfig.DNSServerSearchOrder {
 				if dnsIp == common.StealthDnsIp {
 					continue
 				}
@@ -218,6 +221,11 @@ func (h *WindowsHandler) getPrimaryInterface(interMap map[string][]string) error
 }
 
 func (h *WindowsHandler) setDNS(restoreFlag bool) error {
+	if restoreFlag && h.dhcpEnabled {
+		cmd := exec.Command("netsh", "interface", "ipv4", "set", "dnsservers", h.interfaceName, "dhcp")
+		return cmd.Run()
+	}
+
 	dnsList := make([]string, 0)
 	if !restoreFlag {
 		dnsList = append(dnsList, common.StealthDnsIp)
@@ -249,7 +257,7 @@ func (h *WindowsHandler) setDNS(restoreFlag bool) error {
 	return nil
 }
 
-func (h *WindowsHandler) getActiveInterfacesInfo() (map[string][]string, error) {
+func (h *WindowsHandler) getActiveInterfacesInfo() (map[string]*NetworkAdapterConfig, error) {
 	var adapters []NetworkAdapter
 	err := wmi.Query("SELECT * FROM Win32_NetworkAdapter", &adapters)
 	if err != nil {
@@ -268,13 +276,13 @@ func (h *WindowsHandler) getActiveInterfacesInfo() (map[string][]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	interMap := make(map[string][]string)
+	interMap := make(map[string]*NetworkAdapterConfig)
 	for _, cfg := range configs {
 		if len(cfg.DNSServerSearchOrder) == 0 {
 			continue
 		}
 		if name, ok := adapterMap[cfg.SettingID]; ok {
-			interMap[name] = cfg.DNSServerSearchOrder
+			interMap[name] = &cfg
 		}
 	}
 	return interMap, nil
