@@ -28,22 +28,6 @@ Go Language environment: **Go 1.24.10** . Installation package download: <https:
 
 ### 1.3 Configuration Files
 
-- dns.toml
-
-  ```tom
-  # StealthDNS base config
-  # field with (-) does not support dynamic update
-  
-  # UpstreamDNS (-): upstream DNS server. Parse non-NHP related DNS requests and domain names returned by the nhp-server.
-  # SetSystemDNS (-): automatically configure system DNS. Requires administrator rights and SetSystemDNS to be true. Otherwise, manually set the primary DNS to 127.0.0.1.
-  # RemoveLocalDNS (-): Remove local DNS proxy. Deletes the 127.0.0.1 DNS proxy after it is set, if RemoveLocalDNS is true.
-  # LogLevel: 0: silent, 1: error, 2: info, 3: audit, 4: debug, 5: trace.
-  UpstreamDNS = "8.8.8.8"
-  SetSystemDNS = true
-  RemoveLocalDNS = true
-  LogLevel = 4
-  ```
-
 - config.toml
 
   ```toml
@@ -56,7 +40,7 @@ Go Language environment: **Go 1.24.10** . Installation package download: <https:
   # UserId: specify the user id this agent represents.
   # OrganizationId: specify the organization id this agent represents.
   # LogLevel: 0: silent, 1: error, 2: info, 3: audit, 4: debug, 5: trace.
-  PrivateKeyBase64 = "+Jnee2lP6Kn47qzSaqwSmWxORsBkkCV6YHsRqXCegVo="
+  PrivateKeyBase64 = "eACeqvhs7AWHIXM+xsKK9cCk31gFinnMGgGI2RuAxUQ="
   DefaultCipherScheme = 1
   UserId = "agent-0"
   OrganizationId = "opennhp.cn"
@@ -82,10 +66,10 @@ Go Language environment: **Go 1.24.10** . Installation package download: <https:
   # PubKeyBase64: public key of the server peer in base64 format
   # ExpireTime (epoch timestamp in seconds): peer key validation will fail when it expires.
   [[Servers]]
-  Hostname = ""
-  Ip = "172.16.3.54"
+  Hostname = "nhp.opennhp.org"
+  Ip = ""
   Port = 62206
-  PubKeyBase64 = "WqJxe+Z4+wLen3VRgZx6YnbjvJFmptz99zkONCt/7gc="
+  PubKeyBase64 = "T29VClxfuJa7AKA2D+4gBvGXnyGZA35AdqRkdjk49Vs="
   ExpireTime = 1924991999
   ```
 
@@ -94,21 +78,19 @@ Go Language environment: **Go 1.24.10** . Installation package download: <https:
 - resource.toml
 
   ```toml
-  # List resources for the agent to knock automatically after launch
+  # list the server peers for the agent under [[Servers]] table
   
-  # AuthServiceId: id of the authentication and authorization service provider the resource belongs to.
-  # ResourceId: id of the resource group.
-  # ServerHostname: host name of the NHP server that manages this resource group.
-  # ServerIp: ip address of the NHP server  that manages this resource group.
-  # ServerPort: port of the NHP server that manages this resource group.
-  # NOTE: ServerHostname, ServerIp and ServerPort must match with the Hostname, Ip and Port of the server defined
-  # in server.toml in order for the program to locate the correct server peer
-  [[Resources]]
-  AuthServiceId = "example"
-  ResourceId = "demo"
-  ServerHostname = ""
-  ServerIp = "172.16.3.54"
-  ServerPort = 62206
+  # Hostname: the domain of the server peer. If specified, it overrides the "Ip" field with its first resolved address.
+  # Ip: specify the ip address of the server peer
+  # Port: specify the port number of this server peer is listening
+  # PubKeyBase64: public key of the server peer in base64 format
+  # ExpireTime (epoch timestamp in seconds): peer key validation will fail when it expires.
+  [[Servers]]
+  Hostname = "nhp.opennhp.org"
+  Ip = ""
+  Port = 62206
+  PubKeyBase64 = "T29VClxfuJa7AKA2D+4gBvGXnyGZA35AdqRkdjk49Vs="
+  ExpireTime = 1924991999
   ```
 
 
@@ -138,6 +120,8 @@ If updates to the SDK files are needed, please refer to the documentation in `ht
 - **Linux and macOS**: Run the program using the `sudo` command or as the `root` user. Otherwise, the StealthDNS service will be unable to listen on port 53, and the DNS proxy address `127.0.0.1` cannot be added.
 
   Run it in the terminal using the command `sudo stealth-dns run`.
+  
+- **Note:** If the StealthDNS proxy service has not set 127.0.0.1 as the primary DNS, please manually modify the DNS configuration to set 127.0.0.1 as the primary DNS. This ensures that domain name resolution requests can properly reach the StealthDNS proxy service for domain resolution.
 
 
 

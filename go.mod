@@ -4,6 +4,7 @@ go 1.24.10
 
 require (
 	github.com/OpenNHP/opennhp/nhp v0.0.0-20251112025157-ef1b049677e8
+	github.com/StackExchange/wmi v1.2.1
 	github.com/miekg/dns v1.1.68
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/urfave/cli/v2 v2.27.7
@@ -19,6 +20,7 @@ require (
 	github.com/coocood/freecache v1.2.4 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
+	github.com/go-ole/go-ole v1.2.5 // indirect
 	github.com/go-sql-driver/mysql v1.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect

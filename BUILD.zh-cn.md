@@ -30,22 +30,6 @@ Go语言环境：**1.24.10**。安装包下载地址：<https://go.dev/dl/>
 
 ### 1.3 配置文件
 
-- dns.toml
-
-  ```tom
-  # StealthDNS base config
-  # field with (-) does not support dynamic update
-  
-  # UpstreamDNS (-): upstream DNS server. Parse non-NHP related DNS requests and domain names returned by the nhp-server.
-  # SetSystemDNS (-): automatically configure system DNS. Requires administrator rights and SetSystemDNS to be true. Otherwise, manually set the primary DNS to 127.0.0.1.
-  # RemoveLocalDNS (-): Remove local DNS proxy. Deletes the 127.0.0.1 DNS proxy after it is set, if RemoveLocalDNS is true.
-  # LogLevel: 0: silent, 1: error, 2: info, 3: audit, 4: debug, 5: trace.
-  UpstreamDNS = "8.8.8.8"
-  SetSystemDNS = true
-  RemoveLocalDNS = true
-  LogLevel = 4
-  ```
-
 - config.toml
 
   ```toml
@@ -58,7 +42,7 @@ Go语言环境：**1.24.10**。安装包下载地址：<https://go.dev/dl/>
   # UserId: specify the user id this agent represents.
   # OrganizationId: specify the organization id this agent represents.
   # LogLevel: 0: silent, 1: error, 2: info, 3: audit, 4: debug, 5: trace.
-  PrivateKeyBase64 = "+Jnee2lP6Kn47qzSaqwSmWxORsBkkCV6YHsRqXCegVo="
+  PrivateKeyBase64 = "eACeqvhs7AWHIXM+xsKK9cCk31gFinnMGgGI2RuAxUQ="
   DefaultCipherScheme = 1
   UserId = "agent-0"
   OrganizationId = "opennhp.cn"
@@ -84,13 +68,13 @@ Go语言环境：**1.24.10**。安装包下载地址：<https://go.dev/dl/>
   # PubKeyBase64: public key of the server peer in base64 format
   # ExpireTime (epoch timestamp in seconds): peer key validation will fail when it expires.
   [[Servers]]
-  Hostname = ""
-  Ip = "172.16.3.54"
+  Hostname = "nhp.opennhp.org"
+  Ip = ""
   Port = 62206
-  PubKeyBase64 = "WqJxe+Z4+wLen3VRgZx6YnbjvJFmptz99zkONCt/7gc="
+  PubKeyBase64 = "T29VClxfuJa7AKA2D+4gBvGXnyGZA35AdqRkdjk49Vs="
   ExpireTime = 1924991999
   ```
-
+  
   
 
 - resource.toml
@@ -108,8 +92,8 @@ Go语言环境：**1.24.10**。安装包下载地址：<https://go.dev/dl/>
   [[Resources]]
   AuthServiceId = "example"
   ResourceId = "demo"
-  ServerHostname = ""
-  ServerIp = "172.16.3.54"
+  ServerHostname = "nhp.opennhp.org"
+  ServerIp = ""
   ServerPort = 62206
   ```
 
@@ -141,6 +125,8 @@ StealthDNS通过调用nhp-agent SDK完成访问资源的敲门过程，在项目
 - **Linux与macOS**环境下使用`sudo`指令或root账号来运行程序，否则StealthDNS服务将无法监听53端口，同时不能增加DNS代理地址127.0.0.1。
 
   在终端中通过指令`sudo stealth-dns run`来运行。
+  
+- 注意：代理服务StealthDNS如未将127.0.0.1设置成主DNS，请手动修改DNS配置将127.0.0.1设置为主DNS，确保域名解析请求能正常访问代理服务StealthDNS进行域名解析。
 
 
 

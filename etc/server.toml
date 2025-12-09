@@ -6,8 +6,8 @@
 # PubKeyBase64: public key of the server peer in base64 format
 # ExpireTime (epoch timestamp in seconds): peer key validation will fail when it expires.
 [[Servers]]
-Hostname = ""
-Ip = "172.16.3.54"
+Hostname = "nhp.opennhp.org"
+Ip = ""
 Port = 62206
-PubKeyBase64 = "WqJxe+Z4+wLen3VRgZx6YnbjvJFmptz99zkONCt/7gc="
+PubKeyBase64 = "T29VClxfuJa7AKA2D+4gBvGXnyGZA35AdqRkdjk49Vs="
 ExpireTime = 1924991999

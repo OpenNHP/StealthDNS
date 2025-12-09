@@ -10,6 +10,6 @@
 [[Resources]]
 AuthServiceId = "example"
 ResourceId = "demo"
-ServerHostname = ""
-ServerIp = "172.16.3.54"
+ServerHostname = "nhp.opennhp.org"
+ServerIp = ""
 ServerPort = 62206

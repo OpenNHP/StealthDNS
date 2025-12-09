@@ -1,8 +1,7 @@
 package dns
 
 import (
-	"runtime"
-
+	"github.com/OpenNHP/StealthDNS/common"
 	"github.com/OpenNHP/StealthDNS/dns/handler"
 	"github.com/OpenNHP/opennhp/nhp/log"
 )
@@ -11,18 +10,9 @@ type Manager struct {
 	handler handler.Handler
 }
 
-func NewDNSManager(removeLocalDNS bool) *Manager {
+func NewDNSManager() *Manager {
 	m := &Manager{}
-	switch runtime.GOOS {
-	case "windows":
-		m.handler = handler.NewWindowsHandler(removeLocalDNS)
-	case "darwin":
-		m.handler = handler.NewMacHandler(removeLocalDNS)
-	case "linux":
-		m.handler = handler.NewLinuxHandler()
-	default:
-		log.Warning("%s operating system is not supported; unable to create a DNS handler.", runtime.GOOS)
-	}
+	m.handler = handler.NewDNSHandler()
 	return m
 }
 
@@ -40,4 +30,13 @@ func (d *Manager) SetStealthDNS() bool {
 
 func (d *Manager) RemoveStealthDNS() {
 	d.handler.RemoveStealthDNS()
+}
+
+func (d *Manager) GetUpstreamDNS() string {
+	upstreamDNS := d.handler.GetUpstreamDNS()
+	if len(upstreamDNS) == 0 {
+		upstreamDNS = common.DefaultUpstreamDNS
+	}
+	log.Debug("upstream dns is %s", upstreamDNS)
+	return upstreamDNS
 }

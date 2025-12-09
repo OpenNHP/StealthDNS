@@ -1,96 +1,99 @@
+//go:build windows
+
 package handler
 
 import (
-	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/OpenNHP/StealthDNS/common"
 	"github.com/OpenNHP/opennhp/nhp/log"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/encoding/traditionalchinese"
+	"github.com/StackExchange/wmi"
+	"golang.org/x/text/encoding/ianaindex"
+	"golang.org/x/text/transform"
 )
 
 type WindowsHandler struct {
-	codePage           int
-	isAdmin            bool
-	dnsSetupFlag       bool
-	removeLocalDNSFlag bool
-	interfaces         []string
+	isAdmin       bool
+	dnsSetupFlag  bool
+	interfaceName string
+	backupDNS     []string
+	upstreamDNS   string
+	codePage      uint32
 }
 
-type CodePage struct {
-	CodeSet     string
-	OSLanguage  uint32
-	CountryCode string
+type NetworkAdapter struct {
+	Index           uint32 `wmi:"Index"`
+	GUID            string `wmi:"GUID"`
+	NetConnectionID string `wmi:"NetConnectionID"`
 }
 
-func NewWindowsHandler(removeLocalDNS bool) *WindowsHandler {
+type NetworkAdapterConfig struct {
+	InterfaceIndex       uint32   `wmi:"InterfaceIndex"`
+	SettingID            string   `wmi:"SettingID"`
+	DNSServerSearchOrder []string `wmi:"DNSServerSearchOrder"`
+	IPEnabled            bool     `wmi:"IPEnabled"`
+}
+
+type WinInterInfo struct {
+	Name   string
+	Metric int
+}
+
+func NewDNSHandler() *WindowsHandler {
 	h := &WindowsHandler{
-		dnsSetupFlag:       false,
-		removeLocalDNSFlag: removeLocalDNS,
-		interfaces:         make([]string, 0),
+		dnsSetupFlag: false,
 	}
 	h.isAdminPermission()
-	h.getCodePage()
+	h.getOEMCodePage()
 	return h
+}
+
+func (h *WindowsHandler) GetUpstreamDNS() string {
+	return h.upstreamDNS
 }
 
 func (h *WindowsHandler) SetStealthDNS() (bool, error) {
 	if !h.isAdmin {
 		log.Warning("The current account does not have administrator privileges. Please manually configure the alternate DNS.")
-		return false, nil
+		return true, nil
 	}
-	interfaces, err := h.getNetworkInterfaces()
+	info, err := h.getActiveInterfacesInfo()
 	if err != nil {
-		log.Error("get network interfaces fail, %v", err)
+		log.Error("get active interface info fail: %v", err)
 		return false, err
 	}
-	index := 0
-	for _, s := range interfaces {
-		r, e := h.setLocalDNS(s)
-		if e != nil {
-			log.Error("set DNS [%s] fail: %v", err)
-			continue
-		}
-		if r {
-			h.interfaces = append(h.interfaces, s)
-			h.dnsSetupFlag = true
-			index++
-		}
+	err = h.getPrimaryInterface(info)
+	if err != nil {
+		log.Error("get primary interface fail: %v", err)
+		return false, err
 	}
-	if index == 0 {
-		return false, errors.New("no network interface dns setup success")
+	err = h.setDNS(false)
+	if err != nil {
+		log.Error("set stealth dns proxy fail: %v", err)
+		return false, err
 	}
-	if index < len(interfaces) {
-		log.Warning("Not all DNS settings were applied successfully. Please check your DNS configuration.")
-	}
+	h.dnsSetupFlag = true
 	return true, nil
 }
-
 func (h *WindowsHandler) RemoveStealthDNS() {
-	if !h.removeLocalDNSFlag && !h.dnsSetupFlag {
-		log.Debug("The current account does not have administrator privileges. Please manually configure the alternate DNS.")
+	if !h.dnsSetupFlag {
+		log.Warning("The DNS proxy address is configured manually, and the StealthDNS service does not automatically restore the settings.")
 		return
 	}
-
 	if !h.isAdmin {
 		log.Warning("The current account does not have administrator privileges. Please manually configure the alternate DNS.")
 		return
 	}
-
-	if len(h.interfaces) == 0 {
-		log.Warning("No interfaces found, DNS reset is not required.")
-		return
-	}
-
-	for _, s := range h.interfaces {
-		r, _ := h.removeLocalDNS(s)
-		if r {
-			h.dnsSetupFlag = false
-		}
+	err := h.setDNS(true)
+	if err != nil {
+		log.Error("restore the DNS configuration fail: %v", err)
+		log.Debug("please manually restore the DNS configuration.")
 	}
 }
 
@@ -103,139 +106,176 @@ func (h *WindowsHandler) isAdminPermission() {
 	}
 }
 
-func (h *WindowsHandler) getCodePage() {
-	cp := getCodePageByWmi()
-	if cp == 0 {
-		cp = getCodePageByPowerShell()
-	}
-	h.codePage = cp
-}
-
-func getCodePageByWmi() int {
-	cmd := exec.Command("wmic", "os", "get", "CodeSet", "/value")
-	output, err := cmd.Output()
-	if err != nil {
-		return 0
-	}
-	lines := strings.Split(string(output), "\r\n")
-	for _, line := range lines {
-		if strings.Contains(line, "CodeSet") {
-			codePage := line[8:]
-			if cpNum, err := strconv.Atoi(codePage); err == nil {
-				return cpNum
-			}
-		}
-	}
-	return 0
-}
-
-func getCodePageByPowerShell() int {
+func (h *WindowsHandler) getOEMCodePage() {
 	cmd := exec.Command("powershell", "-Command", "[Console]::OutputEncoding.CodePage")
 	output, err := cmd.Output()
-	if err == nil {
-		cpStr := strings.TrimSpace(string(output))
-		if cp, err := strconv.Atoi(cpStr); err == nil && cp > 0 {
-			return cp
-		}
+	if err != nil {
+		h.codePage = 437
 	}
-	return 0
+	cp, err := strconv.ParseUint(strings.TrimSpace(string(output)), 10, 32)
+	if err != nil {
+		h.codePage = 437
+	}
+	h.codePage = uint32(cp)
 }
 
-func (h *WindowsHandler) getNetworkInterfaces() ([]string, error) {
-	cmd := exec.Command("powershell", "-Command", `
-        $defaultRoute = Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Sort-Object -Property InterfaceMetric | Select-Object -First 1
-        if ($defaultRoute) {
-            $adapter = Get-NetAdapter -InterfaceIndex $defaultRoute.InterfaceIndex
-            $adapter.Name
-        } else {
-            # If default route is missing, pick the first connected network adapter.
-            $connectedAdapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.InterfaceOperationalStatus -eq 'Connected' }
-            if ($connectedAdapters) {
-                $connectedAdapters | Sort-Object -Property InterfaceMetric | Select-Object -First 1 -ExpandProperty Name
-            }
-        }
-    `)
-	output, err := cmd.Output()
+func (h *WindowsHandler) decodeFromCodePage(data []byte) (string, error) {
+	if h.codePage == 65001 {
+		return string(data), nil
+	}
+
+	mimeName := fmt.Sprintf("cp%d", h.codePage)
+	enc, err := ianaindex.MIME.Encoding(mimeName)
+	if err != nil {
+		return string(data), nil
+	}
+
+	decoder := enc.NewDecoder()
+	utf8Str, _, err := transform.String(decoder, string(data))
+	if err != nil {
+		return string(data), nil
+	}
+	return utf8Str, nil
+}
+
+func (h *WindowsHandler) getActiveInterfacesWithMetric() ([]WinInterInfo, error) {
+	cmd := exec.Command("netsh", "interface", "ipv4", "show", "interfaces")
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, err
 	}
 
-	interfaces := make([]string, 0)
-	str, err := h.BytesToString(output)
+	text, err := h.decodeFromCodePage(output)
 	if err != nil {
-		return nil, err
+		text = string(output)
 	}
-	lines := strings.Split(str, "\r\n")
+
+	lines := strings.Split(text, "\n")
+	var interfaces []WinInterInfo
+
 	for _, line := range lines {
-		if len(line) > 0 {
-			interfaces = append(interfaces, line)
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.Contains(line, "connected") {
+			continue
 		}
+
+		fields := regexp.MustCompile(`\s{2,}`).Split(line, -1)
+		if len(fields) < 4 {
+			continue
+		}
+
+		if _, err := strconv.Atoi(fields[0]); err != nil {
+			continue
+		}
+
+		metricStr := fields[1]
+		name := strings.TrimSpace(fields[len(fields)-1])
+
+		metric, err := strconv.Atoi(metricStr)
+		if err != nil {
+			continue
+		}
+
+		interfaces = append(interfaces, WinInterInfo{Name: name, Metric: metric})
 	}
+
 	return interfaces, nil
 }
 
-func (h *WindowsHandler) setLocalDNS(interfaceName string) (bool, error) {
-	cmd := exec.Command("netsh", "interface", "ip", "show", "dns", interfaceName)
-	output, err := cmd.Output()
+// Get the interface with the lowest metric (highest priority)
+func (h *WindowsHandler) getPrimaryInterface(interMap map[string][]string) error {
+	interfaces, err := h.getActiveInterfacesWithMetric()
 	if err != nil {
-		return false, err
+		return err
 	}
-	str, err := h.BytesToString(output)
-	if err != nil {
-		return false, err
+	if len(interfaces) == 0 {
+		return fmt.Errorf("no active network interface found")
 	}
-	lines := strings.Split(str, "\r\n")
-	for _, line := range lines {
-		if strings.Contains(line, common.StealthDnsIp) {
-			return true, nil
-		}
-	}
-	//Set 127.0.0.1 as the primary DNS because when the primary DNS returns DNS_PROBE_FINISHED_NXDOMAIN, the server will not query the secondary DNS.
-	//This would cause 127.0.0.1 to fail to take effect if it were set as the secondary DNS. Therefore, 127.0.0.1 must be set as the primary DNS to ensure
-	//all requests are processed by StealthDNS. For domains it doesn't recognize, StealthDNS will reply with NOANSWER or forward the request to the configured
-	//upstream DNS, ensuring that non-nhp related domains can be resolved normally.
-	cmd = exec.Command("netsh", "interface", "ip", "add", "dns", interfaceName, common.StealthDnsIp, "index=1")
-	//cmd = exec.Command("netsh", "interface", "ip", "set", "dns", interfaceName, "static", common.StealthDnsIp)
-	err = cmd.Run()
-	if err == nil {
-		return true, nil
-	}
-	return false, err
-}
 
-func (h *WindowsHandler) removeLocalDNS(interfaceName string) (bool, error) {
-	cmd := exec.Command("netsh", "interface", "ip", "show", "dns", interfaceName)
-	output, err := cmd.Output()
-	if err != nil {
-		return false, err
-	}
-	str, err := h.BytesToString(output)
-	if err != nil {
-		return false, err
-	}
-	lines := strings.Split(str, "\r\n")
-	for _, line := range lines {
-		if strings.Contains(line, common.StealthDnsIp) {
-			cmd = exec.Command("netsh", "interface", "ip", "delete", "dns", interfaceName, common.StealthDnsIp)
-			err = cmd.Run()
-			if err == nil {
-				return true, nil
+	sort.Slice(interfaces, func(i, j int) bool {
+		return interfaces[i].Metric < interfaces[j].Metric
+	})
+	for _, interfaceInfo := range interfaces {
+		if dnsList, ok := interMap[interfaceInfo.Name]; ok {
+			h.interfaceName = interfaceInfo.Name
+			h.backupDNS = make([]string, 0)
+			for _, dnsIp := range dnsList {
+				if dnsIp == common.StealthDnsIp {
+					continue
+				}
+				h.backupDNS = append(h.backupDNS, dnsIp)
 			}
-			return false, err
+			if len(h.backupDNS) == 0 {
+				log.Warning("Failed to obtain upstream DNS; using default DNS [%s] as the upstream DNS", common.DefaultUpstreamDNS)
+				h.upstreamDNS = common.DefaultUpstreamDNS
+			} else {
+				h.upstreamDNS = h.backupDNS[0]
+			}
+			return nil
 		}
 	}
-	return false, err
+	return fmt.Errorf("no active network interface found")
 }
 
-func (h *WindowsHandler) BytesToString(output []byte) (string, error) {
-	switch h.codePage {
-	case 936:
-		// GBK
-		return simplifiedchinese.GBK.NewDecoder().String(string(output))
-	case 950:
-		return traditionalchinese.Big5.NewDecoder().String(string(output))
-	default:
-		// UTF-8
-		return string(output), nil
+func (h *WindowsHandler) setDNS(restoreFlag bool) error {
+	dnsList := make([]string, 0)
+	if !restoreFlag {
+		dnsList = append(dnsList, common.StealthDnsIp)
 	}
+	for _, dnsIp := range h.backupDNS {
+		dnsList = append(dnsList, dnsIp)
+	}
+	cmd := exec.Command("netsh", "interface", "ip", "delete", "dns", h.interfaceName, "all")
+	err := cmd.Run()
+	if err != nil {
+		log.Error("Failed to clear system DNS server configuration: %v", err)
+		return err
+	}
+	cmd = exec.Command("netsh", "interface", "ipv4", "set", "dns",
+		h.interfaceName, "static", dnsList[0], "primary")
+
+	err = cmd.Run()
+
+	if err != nil {
+		log.Warning("Failed to set primary DNS：%v", err)
+		return err
+	}
+	for i := 1; i < len(dnsList); i++ {
+		cmd = exec.Command("netsh", "interface", "ipv4", "add", "dns",
+			h.interfaceName, dnsList[i], "index="+strconv.Itoa(i+1))
+		_ = cmd.Run() // Ignore failure to add secondary DNS.
+	}
+
+	return nil
+}
+
+func (h *WindowsHandler) getActiveInterfacesInfo() (map[string][]string, error) {
+	var adapters []NetworkAdapter
+	err := wmi.Query("SELECT * FROM Win32_NetworkAdapter", &adapters)
+	if err != nil {
+		return nil, err
+	}
+
+	adapterMap := make(map[string]string)
+	for _, a := range adapters {
+		if a.NetConnectionID != "" {
+			adapterMap[a.GUID] = a.NetConnectionID
+		}
+	}
+
+	var configs []NetworkAdapterConfig
+	err = wmi.Query("SELECT * FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled=True", &configs)
+	if err != nil {
+		return nil, err
+	}
+	interMap := make(map[string][]string)
+	for _, cfg := range configs {
+		if len(cfg.DNSServerSearchOrder) == 0 {
+			continue
+		}
+		if name, ok := adapterMap[cfg.SettingID]; ok {
+			interMap[name] = cfg.DNSServerSearchOrder
+		}
+	}
+	return interMap, nil
 }

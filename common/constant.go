@@ -4,6 +4,7 @@ const (
 	StealthDnsIp        = "127.0.0.1"
 	DnsUdpPort          = 53
 	NhpDomainNameSuffix = ".nhp"
+	DefaultUpstreamDNS  = "8.8.8.8"
 )
 
 const (

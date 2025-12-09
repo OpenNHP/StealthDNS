@@ -21,10 +21,7 @@ var (
 )
 
 type Config struct {
-	UpstreamDNS    string `json:"upstreamDNS"`
-	SetSystemDNS   bool   `json:"setSystemDNS"`
-	LogLevel       int    `json:"logLevel"`
-	RemoveLocalDNS bool   `json:"removeLocalDNS"`
+	LogLevel int `json:"logLevel"`
 }
 
 type Resources struct {
@@ -41,7 +38,7 @@ type Resource struct {
 
 func (p *ProxyService) loadDNSConfig() error {
 	// config.toml
-	fileName := filepath.Join(common.ExeDirPath, "etc", "dns.toml")
+	fileName := filepath.Join(common.ExeDirPath, "etc", "config.toml")
 	if err := p.updateDNSConfig(fileName); err != nil {
 		// report base config error
 		return err
@@ -87,8 +84,6 @@ func (p *ProxyService) updateDNSConfig(file string) (err error) {
 
 	if p.config == nil {
 		p.config = &conf
-		p.upstreamDNS = conf.UpstreamDNS
-		p.forward = len(p.upstreamDNS) > 0
 		p.log.SetLogLevel(conf.LogLevel)
 		return err
 	}
@@ -98,8 +93,6 @@ func (p *ProxyService) updateDNSConfig(file string) (err error) {
 		log.Info("set base log level to %d", conf.LogLevel)
 		p.log.SetLogLevel(conf.LogLevel)
 		p.config.LogLevel = conf.LogLevel
-		p.upstreamDNS = conf.UpstreamDNS
-		p.forward = len(p.upstreamDNS) > 0
 	}
 	return err
 }

@@ -1,3 +1,5 @@
+//go:build darwin
+
 package handler
 
 import (
@@ -13,115 +15,107 @@ import (
 )
 
 type MacHandler struct {
-	isAdmin            bool
-	dnsSetupFlag       bool
-	removeLocalDNSFlag bool
-	dnsServersCache    map[string][]string
-	networkServices    []string
+	isRoot        bool
+	dnsSetupFlag  bool
+	interfaceName string
+	backupDNS     []string
+	upstreamDNS   string
 }
 
-func NewMacHandler(removeLocalDNS bool) *MacHandler {
+func NewDNSHandler() *MacHandler {
 	h := &MacHandler{
-		dnsSetupFlag:       false,
-		removeLocalDNSFlag: removeLocalDNS,
-		dnsServersCache:    make(map[string][]string),
-		networkServices:    make([]string, 0),
+		dnsSetupFlag: false,
 	}
-	h.isAdminPermission()
+	h.isRootPermission()
 	return h
 }
 
 func (h *MacHandler) SetStealthDNS() (bool, error) {
-	if !h.isAdmin {
-		log.Warning("The current account does not have administrator privileges. Please manually configure the alternate DNS.")
+	if !h.isRoot {
+		log.Warning("The current account does not have root privileges. Please manually configure the alternate DNS.")
 		return false, nil
 	}
-	err := h.getNetworkServices()
+	err := h.getInterfaceName()
 	if err != nil {
 		log.Error("Failed to retrieve network settings: %v", err)
 		return false, err
 	}
-	index := 0
-	for _, service := range h.networkServices {
-		err = h.backupAndSet(service)
-		if err != nil {
-			log.Error("set DNS [%s] fail: %v", err)
-			continue
-		}
-		index++
+	err = h.backupAndSet()
+	if err != nil {
+		return false, err
 	}
-	if index == 0 {
-		return false, errors.New("no network interface dns setup success")
-	}
-	if index < len(h.networkServices) {
-		log.Warning("Not all DNS settings were applied successfully. Please check your DNS configuration.")
-	}
+	h.dnsSetupFlag = true
 	return true, nil
 }
 
 func (h *MacHandler) RemoveStealthDNS() {
-	if !h.removeLocalDNSFlag && !h.dnsSetupFlag {
-		log.Debug("The current account does not have administrator privileges. Please manually configure the alternate DNS.")
+	if !h.dnsSetupFlag {
+		log.Warning("The DNS proxy address is configured manually, and the StealthDNS service does not automatically restore the settings.")
 		return
 	}
 
-	if !h.isAdmin {
-		log.Warning("The current account does not have administrator privileges. Please manually configure the alternate DNS.")
+	if !h.isRoot {
+		log.Warning("The current account does not have root privileges. Please manually configure the alternate DNS.")
 		return
 	}
 
-	if len(h.networkServices) == 0 {
+	if len(h.interfaceName) == 0 {
 		log.Warning("No interfaces found, DNS reset is not required.")
 		return
 	}
-	for _, service := range h.networkServices {
-		err := h.setDNS(service, h.dnsServersCache[service])
-		if err != nil {
-			log.Error("dns network [%s] reset fail: %v", err)
-		}
+	err := h.setDNS(h.backupDNS)
+	if err != nil {
+		log.Error("dns network [%s] reset fail: %v", h.interfaceName, err)
 	}
 }
 
-func (h *MacHandler) getNetworkServices() error {
+func (h *MacHandler) getInterfaceName() error {
 	cmd := exec.Command("networksetup", "-listallnetworkservices")
 	output, err := cmd.Output()
 	if err != nil {
 		return err
 	}
 
-	var services []string
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 
-	// Skip the first header row.
-	if scanner.Scan() {
-		for scanner.Scan() {
-			service := strings.TrimSpace(scanner.Text())
-			if service != "" && !strings.HasPrefix(service, "*") {
-				services = append(services, service)
-			}
+	for scanner.Scan() {
+		service := strings.TrimSpace(scanner.Text())
+		if service == "" || strings.HasPrefix(service, "*") {
+			continue
+		}
+		if h.isNetworkServiceActive(service) {
+			h.interfaceName = service
 		}
 	}
-	if len(services) == 0 {
+	if len(h.interfaceName) == 0 {
 		return errors.New("no network service found")
 	}
-	h.networkServices = services
 	return nil
 }
 
-func (h *MacHandler) backupAndSet(service string) error {
-	err := h.backupDNS(service)
+func (h *MacHandler) isNetworkServiceActive(service string) bool {
+	cmd := exec.Command("/usr/sbin/networksetup", "-getinfo", service)
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(output), "IP address:") && !strings.Contains(string(output), "IP address: 0.0.0.0")
+}
+
+func (h *MacHandler) backupAndSet() error {
+	err := h.storeBackupDNS()
 	if err != nil {
 		return err
 	}
 	dnsServices := make([]string, 0)
 	dnsServices = append(dnsServices, common.StealthDnsIp)
-	dnsServices = append(dnsServices, h.dnsServersCache[service]...)
-	err = h.setDNS(service, dnsServices)
+	dnsServices = append(dnsServices, h.backupDNS...)
+	err = h.setDNS(dnsServices)
 	return err
 }
 
-func (h *MacHandler) setDNS(service string, dnsServers []string) error {
-	args := []string{"-setdnsservers", service}
+func (h *MacHandler) setDNS(dnsServers []string) error {
+	args := []string{"-setdnsservers", h.interfaceName}
 	args = append(args, dnsServers...)
 
 	cmd := exec.Command("networksetup", args...)
@@ -132,8 +126,8 @@ func (h *MacHandler) setDNS(service string, dnsServers []string) error {
 	return nil
 }
 
-func (h *MacHandler) backupDNS(service string) error {
-	cmd := exec.Command("networksetup", "-getdnsservers", service)
+func (h *MacHandler) storeBackupDNS() error {
+	cmd := exec.Command("networksetup", "-getdnsservers", h.interfaceName)
 	output, err := cmd.Output()
 	if err != nil {
 		// If no DNS is set, the command will return an error, but this is normal.
@@ -147,14 +141,24 @@ func (h *MacHandler) backupDNS(service string) error {
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
 		dns := strings.TrimSpace(scanner.Text())
-		if dns != "" {
+		if dns != "" && !strings.EqualFold(dns, common.StealthDnsIp) {
 			dnsServers = append(dnsServers, dns)
 		}
 	}
-	h.dnsServersCache[service] = dnsServers
+	h.backupDNS = dnsServers
+	if len(dnsServers) == 0 {
+		log.Warning("Failed to obtain upstream DNS; using default DNS [%s] as the upstream DNS", common.DefaultUpstreamDNS)
+		h.upstreamDNS = common.DefaultUpstreamDNS
+	} else {
+		h.upstreamDNS = dnsServers[0]
+	}
 	return err
 }
 
-func (h *MacHandler) isAdminPermission() {
-	h.isAdmin = os.Geteuid() == 0
+func (h *MacHandler) isRootPermission() {
+	h.isRoot = os.Geteuid() == 0
+}
+
+func (h *MacHandler) GetUpstreamDNS() string {
+	return h.upstreamDNS
 }

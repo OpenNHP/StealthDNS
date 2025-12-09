@@ -33,10 +33,8 @@ type ProxyService struct {
 
 	server *dns.Server
 
-	upstreamDNS    string
-	forward        bool
-	dnsCache       *StealthDNSCache
-	removeLocalDNS bool
+	upstreamDNS string
+	dnsCache    *StealthDNSCache
 
 	domainMap     map[string]string
 	domainMapLock sync.Mutex
@@ -66,10 +64,11 @@ func (p *ProxyService) Start(dirPath string, logLevel int) (err error) {
 		return err
 	}
 
-	p.dnsManager = NewDNSManager(p.config.RemoveLocalDNS)
+	p.dnsManager = NewDNSManager()
 	if !p.dnsManager.SetStealthDNS() {
 		log.Warning("Stealth DNS setup failed. Please ensure the DNS proxy address 127.0.0.1 is set as the alternate DNS.")
 	}
+	p.upstreamDNS = p.dnsManager.GetUpstreamDNS()
 	p.nhpAgent, err = agent.NewNhpAgent(dirPath)
 	if err != nil {
 		log.Error("init nhp-agent fail: %v", err)
@@ -111,14 +110,13 @@ func (p *ProxyService) Stop() {
 	}
 
 	log.Debug("stop Stealth DNS")
-	if p.nhpAgent != nil {
-		p.nhpAgent.AgentClose()
-	}
-
-	if p.server != nil {
-		p.server.Shutdown()
-	}
 	p.dnsManager.RemoveStealthDNS()
+	if p.nhpAgent != nil {
+		_ = p.nhpAgent.AgentClose()
+	}
+	if p.server != nil {
+		_ = p.server.Shutdown()
+	}
 	log.Info("===========================")
 	log.Info("=== Stealth DNS stopped ===")
 	log.Info("===========================")
@@ -128,7 +126,7 @@ func (p *ProxyService) Stop() {
 
 func (p *ProxyService) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	domainName := r.Question[0].Name
-	log.Trace("domain name：%s, question type：%s", domainName, dns.TypeToString[r.Question[0].Qtype])
+	log.Debug("domain name：%s, question type：%s", domainName, dns.TypeToString[r.Question[0].Qtype])
 	if strings.Contains(domainName, common.NhpDomainNameSuffix) {
 		resId := domainName[:strings.Index(domainName, common.NhpDomainNameSuffix)]
 		if r.Question[0].Qtype == common.Type_A || r.Question[0].Qtype == common.Type_AAAA {
@@ -144,6 +142,7 @@ func (p *ProxyService) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 func (p *ProxyService) forwardUpstreamDNS(w dns.ResponseWriter, r *dns.Msg) {
 	// forward to upstream DNS
+
 	client := &dns.Client{
 		Timeout: 5 * time.Second,
 	}
