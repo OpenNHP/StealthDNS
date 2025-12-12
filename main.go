@@ -120,17 +120,52 @@ func runApp() error {
 	}
 	exeDirPath := filepath.Dir(exeFilePath)
 
+	// Clean up any residual stop signal file
+	stopFilePath := filepath.Join(exeDirPath, ".stealth-dns-stop")
+	os.Remove(stopFilePath)
+
 	p := &dns.ProxyService{}
 	err = p.Start(exeDirPath, 4)
 	if err != nil {
 		return err
 	}
-	//react to terminate signals
+
+	// Create stop channel
+	stopCh := make(chan struct{}, 1)
+
+	// Listen for system signals
 	termCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, syscall.SIGTERM, os.Interrupt, syscall.SIGABRT)
 
-	// block until terminated
-	<-termCh
+	// On Windows, also listen for stop signal file (used by UI to send stop request)
+	if runtime.GOOS == "windows" {
+		go func() {
+			ticker := time.NewTicker(500 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if _, err := os.Stat(stopFilePath); err == nil {
+						fmt.Println("Stop signal file detected, gracefully shutting down...")
+						os.Remove(stopFilePath)
+						stopCh <- struct{}{}
+						return
+					}
+				case <-stopCh:
+					return
+				}
+			}
+		}()
+	}
+
+	// Wait for termination signal
+	select {
+	case <-termCh:
+		fmt.Println("Received system termination signal")
+	case <-stopCh:
+		fmt.Println("Received stop request")
+	}
+
 	p.Stop()
 	return nil
 }

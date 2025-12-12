@@ -1,0 +1,75 @@
+.title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 var(--spacing-md);
+  background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+/* macOS 特定样式：为交通灯按钮（关闭、最小化、最大化）留出空间 */
+.title-bar-macos {
+  padding-left: 80px;
+}
+
+/* macOS 下隐藏自定义的关闭和最小化按钮，使用系统按钮 */
+.title-bar-macos .title-bar-controls {
+  display: none;
+}
+
+.title-bar-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.title-bar-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+
+.title-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.title-bar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.title-bar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.title-bar-btn.close:hover {
+  background: var(--color-danger);
+  color: white;
+}
+
+.title-bar-btn.minimize:hover {
+  background: rgba(0, 212, 170, 0.15);
+  color: var(--color-primary);
+}
+
+.title-bar-btn.maximize:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}

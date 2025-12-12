@@ -39,7 +39,7 @@ build-sdk-linux:
 	cd $(OPENNHP_DIR)/endpoints && go mod tidy
 	cd $(OPENNHP_DIR)/endpoints && \
 		go build -a -trimpath -buildmode=c-shared -ldflags="-w -s" -v \
-		-o ../../sdk/nhp-agent.so ./agent/main/main.go ./agent/main/export.go
+		-o ../../../sdk/nhp-agent.so ./agent/main/main.go ./agent/main/export.go
 	@echo "[StealthDNS] Linux SDK built successfully!"
 
 build-sdk-macos:
@@ -49,7 +49,7 @@ build-sdk-macos:
 	cd $(OPENNHP_DIR)/endpoints && \
 		GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 \
 		go build -a -trimpath -buildmode=c-shared -ldflags="-w -s" -v \
-		-o ../../sdk/nhp-agent.dylib ./agent/main/main.go ./agent/main/export.go
+		-o ../../../sdk/nhp-agent.dylib ./agent/main/main.go ./agent/main/export.go
 	@echo "[StealthDNS] macOS SDK built successfully!"
 
 build:
@@ -76,5 +76,44 @@ build-sdk-windows:
 clean-sdk:
 	@echo "[StealthDNS] Cleaning SDK binaries..."
 	rm -f sdk/nhp-agent.so sdk/nhp-agent.dylib sdk/nhp-agent.dll sdk/nhp-agent.h
+
+# UI 构建相关目标
+ui: ui-init ui-build
+	@echo "[StealthDNS UI] Build for platform ${OS_NAME} successfully done!"
+
+ui-init:
+	@echo "[StealthDNS UI] Initializing..."
+	cd ui && go mod tidy
+	cd ui/frontend && npm install
+
+ui-build:
+	@echo "[StealthDNS UI] Building UI package..."
+ifeq ($(OS_NAME), windows)
+	cd ui && wails build -platform windows/amd64 -o stealthdns-ui.exe
+	cp ./ui/build/bin/stealthdns-ui.exe ./release/
+else ifeq ($(OS_NAME), darwin)
+	cd ui && wails build -platform darwin/universal
+	cp -r ./ui/build/bin/stealthdns-ui.app ./release/ 2>/dev/null || \
+	cp ./ui/build/bin/stealthdns-ui ./release/
+else
+	cd ui && wails build -platform linux/amd64
+	cp ./ui/build/bin/stealthdns-ui ./release/
+endif
+
+ui-dev:
+	@echo "[StealthDNS UI] Starting development mode..."
+	cd ui && wails dev
+
+# 完整构建：DNS 服务 + UI
+full: all ui
+	@echo "[StealthDNS] Full build completed!"
+
+# 清理
+clean:
+	@echo "[StealthDNS] Cleaning..."
+	git clean -df release
+	rm -rf ui/build/bin
+	rm -rf ui/frontend/dist
+	rm -rf ui/frontend/node_modules
 
 .PHONY: all generate-version-and-build init build build-sdk build-sdk-linux build-sdk-macos build-sdk-windows clean-sdk

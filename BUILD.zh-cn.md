@@ -1,6 +1,8 @@
 ## 1 编译与运行
 
-### 1.1 Go环境准备
+### 1.1 环境准备
+
+#### 1.1.1 Go环境准备
 
 Go语言环境：**1.24.10**。安装包下载地址：<https://go.dev/dl/>
 
@@ -21,10 +23,39 @@ Go语言环境：**1.24.10**。安装包下载地址：<https://go.dev/dl/>
 
 - 安装成功后，运行指令`go version`来查看Go版本号。
 
+#### 1.1.2 Wails环境准备
+
+Wails 有许多安装前需要的常见依赖项：
+
+- Go 1.21+ (macOS 15+ requires Go 1.23.3+)
+- NPM (Node 15+)
+
+从 [Node 下载页面](https://nodejs.org/en/download/) 下载 NPM，运行 `npm --version` 进行验证。
+
+Wails平台特定依赖：
+
+- **Windows**: Wails 要求安装 [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) 运行时。 
+- **MacOS**: Wails 要求安装 xcode 命令行工具。 这可以通过运行 `xcode-select --install` 来完成。
+- **Linux**: Linux 需要标准的 `gcc` 构建工具以及 `libgtk3` 和 `libwebkit`。
+
+运行 `go install github.com/wailsapp/wails/v2/cmd/wails@latest` 安装 Wails CLI。
+
+成功安装wails后运行 `wails doctor` 将检查您是否安装了正确的依赖项。 如果没有，它会就缺少的内容提供建议以帮助纠正问题。
+
+<small>*(如果您的系统报告缺少 `wails` 命令，请确保您已正确遵循 Go 安装指南。 通常，这意味着您的用户 home 目录中的 `go/bin` 目录不在 `PATH` 环境变量中。 通常情况下还需要关闭并重新打开任何已打开的命令提示符，以便安装程序对环境所做的更改反映在命令提示符中。)*</small>
+
+Wails安装存在疑问，请参考[Wails官方安装说明](https://wails.io/docs/gettingstarted/installation/)进行Wails的安装。
+
 ### 1.2 程序编译
 
 - **Windows**环境下，通过执行项目根目录下的批处理文件`build.bat`进行编译。
+  - `build.bat`：仅编译stealth-dns.exe可执行文件，该文件可独立运行来进行DNS代理。
+  - `build.bat ui`：仅编译stealth-ui.exe可执行文件，该UI文件需要依赖stealth-dns.exe进行DNS代理。
+  - `build.bat full`：同时编译stealth-dns.exe和stealth-ui.exe两个执行文件。
 - **Linux与macOS**环境下，通过在项目根目录下执行`make`指令进行编译。
+  - `make`：仅编译stealth-dns可执行文件，该文件可独立运行来进行DNS代理。
+  - `make ui`：仅编译stealth-ui可执行文件，该UI文件需要依赖stealth-dns进行DNS代理。
+  - `make full`：同时编译stealth-dns和stealth-ui两个执行文件。
 - 编译后的执行文件在`release\`子目录下。
 - 配置文件在`release\etc\`子目录下，该目录下的配置文件是复制`etc\`子目录下的配置文件。
 
@@ -99,32 +130,17 @@ Go语言环境：**1.24.10**。安装包下载地址：<https://go.dev/dl/>
 
 
 
-
-### 1.4 nhp-agent SDK
-
-StealthDNS通过调用nhp-agent SDK完成访问资源的敲门过程，在项目`sdk\`中各系统对应的SDK文件如下：
-
-- windows: nhp-agent.dll
-- linux: nhp-agent.so
-- macOS: nhp-agent.dylib
-
-通过`build.bat`(windows)/`make`(linux&macOS)编译程序会自动将SDK文件复制到`release\sdk\`，编译后直接在`release`运行可执行程序。
-
-
-
-如需更新SDK文件，请参照`https://github.com/OpenNHP/opennhp`中的文档完成新的SDK文件编译，并将编译后的文件放到项目`sdk\`中。
-
-
-
-### 1.5 程序运行
+### 1.4 程序运行
 
 - **Windows**环境下使用管理员账号运行程序，非管理员账号运行需手动更改系统DNS配置，增加DNS：127.0.0.1作为主DNS或唯一DNS，以确保系统进行域名解析时能正常走代理服务StealthDNS。
 
-  双击`stealth-dns.exe`文件或在命令提示符中通过指令`stealth-dns.exe run`来运行。
+  - 双击`stealth-dns.exe`文件或在命令提示符中通过指令`stealth-dns.exe run`来运行。
+  - 通过`stealth-ui.exe`文件来运行客户端代理服务。
 
 - **Linux与macOS**环境下使用`sudo`指令或root账号来运行程序，否则StealthDNS服务将无法监听53端口，同时不能增加DNS代理地址127.0.0.1。
 
-  在终端中通过指令`sudo stealth-dns run`来运行。
+  - 在终端中通过指令`sudo stealth-dns run`来运行。
+  - 通过`stealth-ui`文件来运行客户端代理服务。
   
 - 注意：代理服务StealthDNS如未将127.0.0.1设置成主DNS，请手动修改DNS配置将127.0.0.1设置为主DNS，确保域名解析请求能正常访问代理服务StealthDNS进行域名解析。
 

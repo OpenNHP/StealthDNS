@@ -1,0 +1,22 @@
+{
+  "$schema": "https://wails.io/schemas/config.v3.json",
+  "name": "stealthdns-ui",
+  "outputfilename": "stealthdns-ui",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "OpenNHP",
+    "email": "info@opennhp.org"
+  },
+  "info": {
+    "companyName": "OpenNHP",
+    "productName": "StealthDNS UI",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2024 OpenNHP",
+    "comments": "StealthDNS Cross-platform Management UI"
+  }
+}
+
+

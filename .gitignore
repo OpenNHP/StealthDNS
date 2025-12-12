@@ -36,3 +36,8 @@ release/
 logs/
 # Auto-generated SDK binaries
 sdk/
+
+# ui file
+ui/frontend/dist/
+ui/frontend/node_modules/
+ui/build/bin/
