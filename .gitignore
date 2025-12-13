@@ -49,4 +49,5 @@ Thumbs.db
 # ui file
 ui/frontend/dist/
 ui/frontend/node_modules/
+ui/frontend/package.json.md5
 ui/build/bin/
