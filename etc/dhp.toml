@@ -1,0 +1,7 @@
+# Configuration that is related to data object hiding protocol in agent side.
+
+# TEEPrivateKeyBase64: base64 encoded private key of TEE (Trusted Execution Environment).
+# This key is used for DHP (Data Hiding Protocol) functionality.
+# If not set, the agent will use the same key as PrivateKeyBase64 from config.toml
+TEEPrivateKeyBase64 = ""
+

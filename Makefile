@@ -3,6 +3,12 @@ export CGO_ENABLED=1
 
 OS_NAME = $(shell uname -s | tr A-Z a-z)
 
+# Go binary path
+GOPATH := $(shell go env GOPATH 2>/dev/null || echo $$HOME/go)
+GOBIN := $(GOPATH)/bin
+PATH := $(GOBIN):$(PATH)
+export PATH
+
 # OpenNHP submodule directory
 OPENNHP_DIR = third_party/opennhp
 
@@ -54,10 +60,11 @@ build-sdk-macos:
 
 build:
 	@echo "[StealthDNS] Building package..."
+	@mkdir -p ./release/etc/cert ./release/sdk
 	go build -trimpath -ldflags="-w -s" -v -o ./release/stealth-dns ./main.go && \
 	cp ./etc/*.toml ./release/etc/ && \
-	cp ./sdk/nhp-agent.* ./release/sdk/ && \
-	cp ./etc/cert/rootCA.pem ./release/etc/cert/
+	cp ./sdk/nhp-agent.* ./release/sdk/ 2>/dev/null || true && \
+	cp ./etc/cert/rootCA.pem ./release/etc/cert/ 2>/dev/null || true
 ifeq ($(OS_NAME), darwin)
 	install_name_tool -change nhp-agent.dylib ./sdk/nhp-agent.dylib ./release/stealth-dns
 endif
@@ -89,14 +96,32 @@ ui-init:
 ui-build:
 	@echo "[StealthDNS UI] Building UI package..."
 ifeq ($(OS_NAME), windows)
-	cd ui && wails build -platform windows/amd64 -o stealthdns-ui.exe
+	@WAILS_CMD=$$(command -v wails 2>/dev/null || echo "$(GOBIN)/wails"); \
+	if [ ! -f "$$WAILS_CMD" ] && [ ! -x "$$WAILS_CMD" ]; then \
+		echo "[StealthDNS] Error: wails command not found. Please run 'make check-wails' first."; \
+		exit 1; \
+	fi; \
+	cd ui && PATH="$(GOBIN):$$PATH" $$WAILS_CMD build -platform windows/amd64 -o stealthdns-ui.exe
 	cp ./ui/build/bin/stealthdns-ui.exe ./release/
 else ifeq ($(OS_NAME), darwin)
-	cd ui && wails build -platform darwin/universal
+	@WAILS_CMD=$$(command -v wails 2>/dev/null); \
+	if [ -z "$$WAILS_CMD" ]; then \
+		WAILS_CMD="$(GOBIN)/wails"; \
+	fi; \
+	if [ ! -f "$$WAILS_CMD" ]; then \
+		echo "[StealthDNS] Error: wails command not found at $$WAILS_CMD. Please run 'make check-wails' first."; \
+		exit 1; \
+	fi; \
+	cd ui && PATH="$(GOBIN):$$PATH" $$WAILS_CMD build -platform darwin/universal
 	cp -r ./ui/build/bin/stealthdns-ui.app ./release/ 2>/dev/null || \
 	cp ./ui/build/bin/stealthdns-ui ./release/
 else
-	cd ui && wails build -platform linux/amd64
+	@WAILS_CMD=$$(command -v wails 2>/dev/null || echo "$(GOBIN)/wails"); \
+	if [ ! -f "$$WAILS_CMD" ] && [ ! -x "$$WAILS_CMD" ]; then \
+		echo "[StealthDNS] Error: wails command not found. Please run 'make check-wails' first."; \
+		exit 1; \
+	fi; \
+	cd ui && PATH="$(GOBIN):$$PATH" $$WAILS_CMD build -platform linux/amd64
 	cp ./ui/build/bin/stealthdns-ui ./release/
 endif
 
