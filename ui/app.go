@@ -1382,6 +1382,17 @@ func (a *App) getLinuxDNS() []string {
 func (a *App) getWindowsDNS() []string {
 	var dnsServers []string
 
+	// First check if DNS is from DHCP using netsh
+	isDHCP := false
+	if a.interfaceName != "" {
+		checkCmd := exec.Command("netsh", "interface", "ipv4", "show", "dnsservers", fmt.Sprintf("name=%s", a.interfaceName))
+		hideWindow(checkCmd)
+		checkOutput, err := checkCmd.Output()
+		if err == nil && strings.Contains(string(checkOutput), "DHCP") {
+			isDHCP = true
+		}
+	}
+
 	// Use PowerShell to get DNS configuration (hidden window)
 	cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command",
 		"Get-DnsClientServerAddress -AddressFamily IPv4 | Select-Object -ExpandProperty ServerAddresses | Select-Object -Unique")
@@ -1405,7 +1416,12 @@ func (a *App) getWindowsDNS() []string {
 			if matched, _ := regexp.MatchString(`^\d+\.\d+\.\d+\.\d+$`, line); matched {
 				if !seen[line] {
 					seen[line] = true
-					dnsServers = append(dnsServers, line)
+					// If DHCP mode and not 127.0.0.1 (StealthDNS local proxy), append "DHCP"
+					if isDHCP && line != "127.0.0.1" {
+						dnsServers = append(dnsServers, line+" (DHCP)")
+					} else {
+						dnsServers = append(dnsServers, line)
+					}
 				}
 			}
 		}
@@ -1420,7 +1436,12 @@ func (a *App) getWindowsDNS() []string {
 		dns := strings.TrimSpace(line)
 		if dns != "" && !seen[dns] {
 			seen[dns] = true
-			dnsServers = append(dnsServers, dns)
+			// If DHCP mode and not 127.0.0.1 (StealthDNS local proxy), append "DHCP"
+			if isDHCP && dns != "127.0.0.1" {
+				dnsServers = append(dnsServers, dns+" (DHCP)")
+			} else {
+				dnsServers = append(dnsServers, dns)
+			}
 		}
 	}
 
