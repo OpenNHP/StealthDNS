@@ -56,6 +56,8 @@ export interface Translations {
     // DNS information
     currentDNS: string
     loading: string
+    // Admin hint
+    adminRequired: string
   }
   // Client configuration
   clientConfig: {
@@ -196,6 +198,7 @@ const zhCN: Translations = {
     messageStopping: '正在停止 DNS 代理服务...',
     currentDNS: '当前 DNS 地址',
     loading: '加载中...',
+    adminRequired: '启动服务需要管理员权限',
   },
   clientConfig: {
     title: '客户端配置',
@@ -328,6 +331,7 @@ const enUS: Translations = {
     messageStopping: 'Stopping DNS proxy service...',
     currentDNS: 'Current DNS Address',
     loading: 'Loading...',
+    adminRequired: 'Administrator privileges required to start service',
   },
   clientConfig: {
     title: 'Client Configuration',
@@ -460,6 +464,7 @@ const jaJP: Translations = {
     messageStopping: 'DNS プロキシサービスを停止しています...',
     currentDNS: '現在の DNS アドレス',
     loading: '読み込み中...',
+    adminRequired: 'サービスの開始には管理者権限が必要です',
   },
   clientConfig: {
     title: 'クライアント設定',
@@ -592,6 +597,7 @@ const koKR: Translations = {
     messageStopping: 'DNS 프록시 서비스를 중지하는 중...',
     currentDNS: '현재 DNS 주소',
     loading: '로딩 중...',
+    adminRequired: '서비스 시작에는 관리자 권한이 필요합니다',
   },
   clientConfig: {
     title: '클라이언트 설정',
@@ -724,6 +730,7 @@ const deDE: Translations = {
     messageStopping: 'DNS-Proxy-Dienst wird gestoppt...',
     currentDNS: 'Aktuelle DNS-Adresse',
     loading: 'Laden...',
+    adminRequired: 'Administratorrechte erforderlich zum Starten des Dienstes',
   },
   clientConfig: {
     title: 'Client-Konfiguration',
@@ -856,6 +863,7 @@ const frFR: Translations = {
     messageStopping: 'Arrêt du service proxy DNS...',
     currentDNS: 'Adresse DNS actuelle',
     loading: 'Chargement...',
+    adminRequired: 'Privilèges administrateur requis pour démarrer le service',
   },
   clientConfig: {
     title: 'Configuration Client',

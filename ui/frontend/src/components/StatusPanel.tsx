@@ -86,16 +86,19 @@ export function StatusPanel({
       {/* Control buttons */}
       <div className="control-buttons">
         {!status.running ? (
-          <button 
-            className="btn btn-primary btn-large"
-            onClick={onStart}
-            disabled={loading || status.message === 'status_starting'}
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
-            {(loading || status.message === 'status_starting') ? t.status.starting : t.status.startService}
-          </button>
+          <>
+            <button 
+              className="btn btn-primary btn-large"
+              onClick={onStart}
+              disabled={loading || status.message === 'status_starting'}
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+              {(loading || status.message === 'status_starting') ? t.status.starting : t.status.startService}
+            </button>
+            <span className="admin-hint">{t.status.adminRequired}</span>
+          </>
         ) : (
           <>
             <button 
