@@ -3,6 +3,19 @@
 set "ROOT_DIR=%~dp0"
 cd /d "%ROOT_DIR%"
 
+REM Version management
+if exist .version (
+    set /p BASE_VERSION=<.version
+) else (
+    set BASE_VERSION=1.0.0
+)
+for /f %%i in ('git rev-list --count HEAD 2^>nul') do set BUILD_NUMBER=%%i
+if "%BUILD_NUMBER%"=="" set BUILD_NUMBER=0
+for /f %%i in ('git rev-parse --short HEAD 2^>nul') do set COMMIT_ID=%%i
+if "%COMMIT_ID%"=="" set COMMIT_ID=unknown
+for /f "tokens=1-2 delims= " %%a in ('echo %date% %time%') do set BUILD_TIME=%%a %%b
+set GOMODULE=github.com/OpenNHP/StealthDNS/version
+set "VERSION_LDFLAGS=-X %GOMODULE%.Version=%BASE_VERSION% -X %GOMODULE%.BuildNumber=%BUILD_NUMBER% -X %GOMODULE%.CommitID=%COMMIT_ID%"
 
 if "%1"=="ui" goto :buildui
 if "%1"=="full" goto :buildfull
@@ -12,6 +25,7 @@ goto :builddns
 
 :builddns
 echo [StealthDNS] Initializing...
+echo [StealthDNS] Version: %BASE_VERSION% (Build: %BUILD_NUMBER%, Commit: %COMMIT_ID%)
 git submodule update --init --recursive
 go mod tidy
 
@@ -37,7 +51,8 @@ IF %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 cd ..\..\..
 echo [StealthDNS] Windows SDK built successfully!
 echo [StealthDNS] Building StealthDNS...
-go build -trimpath -ldflags="-w -s" -v -o release\stealth-dns.exe main.go
+echo [StealthDNS] Injecting version info: Version=%BASE_VERSION%, Build=%BUILD_NUMBER%, Commit=%COMMIT_ID%
+go build -trimpath -ldflags="-w -s %VERSION_LDFLAGS%" -v -o release\stealth-dns.exe main.go
 IF %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 if not exist release\etc mkdir release\etc
 if not exist release\etc\cert mkdir release\etc\cert
@@ -81,7 +96,9 @@ cd ..
 
 
 echo [StealthDNS] Running wails build...
-call wails build -platform windows/amd64
+echo [StealthDNS UI] Injecting version info: Version=%BASE_VERSION%, Build=%BUILD_NUMBER%, Commit=%COMMIT_ID%
+set "UI_LDFLAGS=-X stealthdns-ui/version.Version=%BASE_VERSION% -X stealthdns-ui/version.BuildNumber=%BUILD_NUMBER% -X stealthdns-ui/version.CommitID=%COMMIT_ID%"
+call wails build -ldflags="%UI_LDFLAGS%" -platform windows/amd64
 IF %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
 
