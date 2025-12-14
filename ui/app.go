@@ -486,16 +486,100 @@ func (a *App) StopDNS() error {
 	return nil
 }
 
+// killMacOSProcess attempts to kill stealth-dns process on macOS
+// First tries to kill by PID without admin privileges, falls back to admin killall if needed
+func (a *App) killMacOSProcess() error {
+	// First try to find and kill by PID (no admin needed if process is owned by current user)
+	// Try to find the process using ps
+	psCmd := exec.Command("ps", "aux")
+	output, err := psCmd.Output()
+	if err == nil {
+		scanner := bufio.NewScanner(strings.NewReader(string(output)))
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.Contains(line, "stealth-dns") && strings.Contains(line, "run") {
+				// Extract PID (second field)
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					pid := fields[1]
+					// Try to send SIGTERM signal (graceful shutdown)
+					killCmd := exec.Command("kill", "-TERM", pid)
+					if err := killCmd.Run(); err == nil {
+						wailsRuntime.LogInfo(a.ctx, "Sent SIGTERM to stealth-dns process (PID: "+pid+")")
+						// Wait a bit to see if process exits
+						time.Sleep(1 * time.Second)
+						// Check if process still exists
+						checkCmd := exec.Command("ps", "-p", pid)
+						if err := checkCmd.Run(); err != nil {
+							// Process exited, success
+							wailsRuntime.LogInfo(a.ctx, "stealth-dns process stopped gracefully")
+							return nil
+						}
+						// Process still running, try SIGKILL
+						killCmd = exec.Command("kill", "-KILL", pid)
+						if err := killCmd.Run(); err == nil {
+							wailsRuntime.LogInfo(a.ctx, "Sent SIGKILL to stealth-dns process (PID: "+pid+")")
+							return nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback: Use osascript to execute killall with admin privileges (only if PID method failed)
+	wailsRuntime.LogInfo(a.ctx, "PID method failed, using osascript with admin privileges to stop stealth-dns")
+	script := `do shell script "killall stealth-dns 2>/dev/null || true" with administrator privileges`
+	cmd := exec.Command("osascript", "-e", script)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		wailsRuntime.LogDebug(a.ctx, fmt.Sprintf("osascript killall output: %s", string(output)))
+		return err
+	}
+
+	wailsRuntime.LogInfo(a.ctx, "stealth-dns process stopped via osascript")
+	return nil
+}
+
 // killStealthDNSProcess kills stealth-dns process by process name
 func (a *App) killStealthDNSProcess() error {
 	var cmd *exec.Cmd
 
 	switch goruntime.GOOS {
 	case "darwin":
-		// macOS: Use osascript to execute killall with admin privileges
-		script := `do shell script "killall stealth-dns 2>/dev/null || true" with administrator privileges`
-		cmd = exec.Command("osascript", "-e", script)
-		wailsRuntime.LogInfo(a.ctx, "Using osascript to stop stealth-dns process")
+		// macOS: First try signal file method (no admin needed)
+		stopFilePath := filepath.Join(filepath.Dir(a.exePath), ".stealth-dns-stop")
+		wailsRuntime.LogInfo(a.ctx, "Creating stop signal file: "+stopFilePath)
+
+		stopFile, err := os.Create(stopFilePath)
+		if err != nil {
+			wailsRuntime.LogWarning(a.ctx, "Failed to create stop signal file: "+err.Error())
+			// Fall back to kill method
+			return a.killMacOSProcess()
+		}
+		stopFile.Close()
+		wailsRuntime.LogInfo(a.ctx, "Stop signal file created, waiting for stealth-dns graceful shutdown...")
+
+		// Wait for process to exit (max 5 seconds)
+		for i := 0; i < 10; i++ {
+			time.Sleep(500 * time.Millisecond)
+			// Check if process is still running
+			psCmd := exec.Command("ps", "aux")
+			output, err := psCmd.Output()
+			if err == nil {
+				if !strings.Contains(string(output), "stealth-dns") || !strings.Contains(string(output), "run") {
+					wailsRuntime.LogInfo(a.ctx, "stealth-dns process gracefully shut down")
+					os.Remove(stopFilePath) // Clean up signal file
+					return nil
+				}
+			}
+		}
+		wailsRuntime.LogWarning(a.ctx, "Timeout waiting, stealth-dns did not respond to stop signal")
+		os.Remove(stopFilePath) // Clean up signal file
+
+		// Fall back to kill method if signal file didn't work
+		wailsRuntime.LogInfo(a.ctx, "Signal file method failed, falling back to kill method")
+		return a.killMacOSProcess()
 
 	case "linux":
 		// Linux: Use pkexec or sudo to execute killall/pkill

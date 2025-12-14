@@ -137,26 +137,25 @@ func runApp() error {
 	termCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, syscall.SIGTERM, os.Interrupt, syscall.SIGABRT)
 
-	// On Windows, also listen for stop signal file (used by UI to send stop request)
-	if runtime.GOOS == "windows" {
-		go func() {
-			ticker := time.NewTicker(500 * time.Millisecond)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					if _, err := os.Stat(stopFilePath); err == nil {
-						fmt.Println("Stop signal file detected, gracefully shutting down...")
-						os.Remove(stopFilePath)
-						stopCh <- struct{}{}
-						return
-					}
-				case <-stopCh:
+	// Listen for stop signal file (used by UI to send stop request without admin privileges)
+	// Works on both Windows and macOS/Linux
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if _, err := os.Stat(stopFilePath); err == nil {
+					fmt.Println("Stop signal file detected, gracefully shutting down...")
+					os.Remove(stopFilePath)
+					stopCh <- struct{}{}
 					return
 				}
+			case <-stopCh:
+				return
 			}
-		}()
-	}
+		}
+	}()
 
 	// Wait for termination signal
 	select {
