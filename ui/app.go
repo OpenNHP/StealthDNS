@@ -729,7 +729,16 @@ func (a *App) killStealthDNSProcess() error {
 		// Windows: Use signal file for graceful shutdown of stealth-dns
 		wailsRuntime.LogInfo(a.ctx, "Attempting to stop stealth-dns.exe process...")
 
-		// Method 1: Create stop signal file for graceful shutdown
+		// First check if process is even running
+		checkCmd := exec.Command("tasklist", "/FI", "IMAGENAME eq stealth-dns.exe", "/NH")
+		hideWindow(checkCmd)
+		checkOutput, _ := checkCmd.Output()
+		if !strings.Contains(string(checkOutput), "stealth-dns.exe") {
+			wailsRuntime.LogInfo(a.ctx, "stealth-dns.exe is not running")
+			return nil
+		}
+
+		// Method 1: Create stop signal file for graceful shutdown (NO ADMIN NEEDED)
 		stopFilePath := filepath.Join(filepath.Dir(a.exePath), ".stealth-dns-stop")
 		wailsRuntime.LogInfo(a.ctx, "Creating stop signal file: "+stopFilePath)
 
@@ -740,15 +749,15 @@ func (a *App) killStealthDNSProcess() error {
 			stopFile.Close()
 			wailsRuntime.LogInfo(a.ctx, "Stop signal file created, waiting for stealth-dns graceful shutdown...")
 
-			// Wait for process to exit (max 5 seconds)
-			for i := 0; i < 10; i++ {
+			// Wait for process to exit (max 8 seconds - longer wait time)
+			for i := 0; i < 16; i++ {
 				time.Sleep(500 * time.Millisecond)
 				// Check if process is still running
 				checkCmd := exec.Command("tasklist", "/FI", "IMAGENAME eq stealth-dns.exe", "/NH")
 				hideWindow(checkCmd)
 				output, _ := checkCmd.Output()
 				if !strings.Contains(string(output), "stealth-dns.exe") {
-					wailsRuntime.LogInfo(a.ctx, "stealth-dns.exe gracefully shut down")
+					wailsRuntime.LogInfo(a.ctx, "stealth-dns.exe gracefully shut down via signal file")
 					os.Remove(stopFilePath) // Clean up signal file
 					return nil
 				}
@@ -757,18 +766,28 @@ func (a *App) killStealthDNSProcess() error {
 			os.Remove(stopFilePath) // Clean up signal file
 		}
 
-		// Method 2: If graceful shutdown fails, use taskkill to force terminate
-		wailsRuntime.LogInfo(a.ctx, "Attempting to force terminate with taskkill...")
+		// Method 2: Try taskkill without admin (may work if we have same user session)
+		wailsRuntime.LogInfo(a.ctx, "Attempting to terminate with taskkill (no admin)...")
 		cmd = exec.Command("taskkill", "/F", "/IM", "stealth-dns.exe")
 		hideWindow(cmd)
 		output, err := cmd.CombinedOutput()
 		if err == nil {
-			wailsRuntime.LogInfo(a.ctx, "taskkill direct execution successful")
+			wailsRuntime.LogInfo(a.ctx, "taskkill execution successful (no admin needed)")
 			return nil
 		}
-		wailsRuntime.LogDebug(a.ctx, fmt.Sprintf("Direct taskkill failed: %v, output: %s", err, string(output)))
+		wailsRuntime.LogDebug(a.ctx, fmt.Sprintf("taskkill without admin failed: %v, output: %s", err, string(output)))
 
-		// Method 3: Create temp batch file to execute taskkill with admin privileges
+		// Check if process stopped anyway
+		checkCmd = exec.Command("tasklist", "/FI", "IMAGENAME eq stealth-dns.exe", "/NH")
+		hideWindow(checkCmd)
+		checkOutput, _ = checkCmd.Output()
+		if !strings.Contains(string(checkOutput), "stealth-dns.exe") {
+			wailsRuntime.LogInfo(a.ctx, "stealth-dns.exe stopped")
+			return nil
+		}
+
+		// Method 3: Only use admin privileges as last resort
+		wailsRuntime.LogWarning(a.ctx, "Process still running, requesting admin privileges...")
 		tmpFile, err := os.CreateTemp("", "stop_dns_*.bat")
 		if err != nil {
 			return fmt.Errorf("failed to create temp file: %v", err)
