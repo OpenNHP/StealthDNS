@@ -34,6 +34,18 @@ export function GetSystemDNS() {
   return window['go']['main']['App']['GetSystemDNS']();
 }
 
+export function GetVersion() {
+  return window['go']['main']['App']['GetVersion']();
+}
+
+export function GetVersionInfo() {
+  return window['go']['main']['App']['GetVersionInfo']();
+}
+
+export function IsProcessRunning() {
+  return window['go']['main']['App']['IsProcessRunning']();
+}
+
 export function MinimizeToTray() {
   return window['go']['main']['App']['MinimizeToTray']();
 }

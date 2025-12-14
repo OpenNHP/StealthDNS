@@ -118,6 +118,24 @@ export namespace main {
 	
 	    }
 	}
+	export class VersionInfo {
+	    version: string;
+	    buildNumber: string;
+	    commitId: string;
+	    buildTime: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.buildNumber = source["buildNumber"];
+	        this.commitId = source["commitId"];
+	        this.buildTime = source["buildTime"];
+	    }
+	}
 
 }
 

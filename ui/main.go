@@ -2,9 +2,11 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"log"
 	"runtime"
 
+	"stealthdns-ui/version"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/menu/keys"
@@ -93,7 +95,7 @@ func main() {
 			},
 			About: &mac.AboutInfo{
 				Title:   "StealthDNS",
-				Message: "DNS Proxy Management Tool\nVersion 1.0.0",
+				Message: fmt.Sprintf("DNS Proxy Management Tool\nVersion %s", getVersionString()),
 				Icon:    icon,
 			},
 		},
@@ -107,6 +109,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// getVersionString returns the version string for display
+func getVersionString() string {
+	if version.BuildNumber != "" {
+		return version.Version + "+" + version.BuildNumber
+	}
+	return version.Version
 }
 
 // createAppMenu creates application menu

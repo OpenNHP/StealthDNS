@@ -11,6 +11,7 @@ import (
 
 	"github.com/OpenNHP/StealthDNS/cert"
 	"github.com/OpenNHP/StealthDNS/dns"
+	"github.com/OpenNHP/StealthDNS/version"
 	"github.com/urfave/cli/v2"
 )
 
@@ -21,7 +22,12 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "StealthDNS"
 	app.Usage = "local DNS proxy service"
-	app.Version = "0.1"
+	// Version is set at build time via ldflags
+	if version.BuildNumber != "" {
+		app.Version = version.Version + "+" + version.BuildNumber
+	} else {
+		app.Version = version.Version
+	}
 
 	app.Action = func(c *cli.Context) error {
 		return runApp()

@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"stealthdns-ui/version"
+
 	"github.com/pelletier/go-toml/v2"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -1666,4 +1668,30 @@ func (a *App) ClearLogFile(filename string) error {
 
 	// Clear file
 	return os.WriteFile(logPath, []byte{}, 0644)
+}
+
+// GetVersion returns the application version
+func (a *App) GetVersion() string {
+	if version.BuildNumber != "" {
+		return version.Version + "+" + version.BuildNumber
+	}
+	return version.Version
+}
+
+// VersionInfo contains detailed version information
+type VersionInfo struct {
+	Version     string `json:"version"`
+	BuildNumber string `json:"buildNumber"`
+	CommitID    string `json:"commitId"`
+	BuildTime   string `json:"buildTime"`
+}
+
+// GetVersionInfo returns detailed version information
+func (a *App) GetVersionInfo() VersionInfo {
+	return VersionInfo{
+		Version:     version.Version,
+		BuildNumber: version.BuildNumber,
+		CommitID:    version.CommitID,
+		BuildTime:   version.BuildTime,
+	}
 }

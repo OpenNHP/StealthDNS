@@ -18,6 +18,12 @@ export function GetStatus():Promise<main.ServiceStatus>;
 
 export function GetSystemDNS():Promise<main.SystemDNSInfo>;
 
+export function GetVersion():Promise<string>;
+
+export function GetVersionInfo():Promise<main.VersionInfo>;
+
+export function IsProcessRunning():Promise<boolean>;
+
 export function MinimizeToTray():Promise<void>;
 
 export function Quit():Promise<void>;

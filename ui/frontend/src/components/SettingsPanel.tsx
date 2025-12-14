@@ -1,13 +1,38 @@
+import { useState, useEffect } from 'react'
 import { useLanguage } from '../contexts/LanguageContext'
 import { languages, Language } from '../i18n'
 import '../styles/SettingsPanel.css'
 
+interface VersionInfo {
+  version: string
+  buildNumber: string
+  commitId: string
+  buildTime: string
+}
+
 export function SettingsPanel() {
   const { language, setLanguage, t } = useLanguage()
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setLanguage(e.target.value as Language)
   }
+
+  useEffect(() => {
+    // Fetch version information from backend
+    const fetchVersionInfo = async () => {
+      try {
+        if (window.go?.main?.App?.GetVersionInfo) {
+          const info = await window.go.main.App.GetVersionInfo()
+          console.log('Version info received:', info) // Debug log
+          setVersionInfo(info)
+        }
+      } catch (err) {
+        console.error('Failed to get version info:', err)
+      }
+    }
+    fetchVersionInfo()
+  }, [])
 
   return (
     <div className="settings-panel">
@@ -42,21 +67,30 @@ export function SettingsPanel() {
         </div>
       </div>
 
-      <div className="language-preview">
-        <h3>语言预览 / Language Preview</h3>
-        <div className="preview-grid">
-          {languages.map(lang => (
-            <div 
-              key={lang.code} 
-              className={`preview-card ${language === lang.code ? 'active' : ''}`}
-              onClick={() => setLanguage(lang.code)}
-            >
-              <span className="preview-native">{lang.nativeName}</span>
-              <span className="preview-english">{lang.name}</span>
+      {/* Version information */}
+      {versionInfo && (
+        <div className="version-info">
+          <div className="version-info-title">{t.settings.versionInfo}</div>
+          <div className="version-info-grid">
+            <div className="version-info-item">
+              <span className="version-info-label">{t.settings.version}:</span>
+              <span className="version-info-value">{versionInfo.version || 'N/A'}</span>
             </div>
-          ))}
+            <div className="version-info-item">
+              <span className="version-info-label">{t.settings.buildNumber}:</span>
+              <span className="version-info-value">{versionInfo.buildNumber || 'N/A'}</span>
+            </div>
+            <div className="version-info-item">
+              <span className="version-info-label">{t.settings.commitId}:</span>
+              <span className="version-info-value">{versionInfo.commitId || 'N/A'}</span>
+            </div>
+            <div className="version-info-item">
+              <span className="version-info-label">{t.settings.buildTime}:</span>
+              <span className="version-info-value">{versionInfo.buildTime || 'N/A'}</span>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

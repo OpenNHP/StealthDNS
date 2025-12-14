@@ -12,6 +12,15 @@ export PATH
 # OpenNHP submodule directory
 OPENNHP_DIR = third_party/opennhp
 
+# Version management
+# Use .version file to avoid conflict with version/ directory (case-insensitive filesystems)
+BASE_VERSION := $(shell cat .version 2>/dev/null || echo "1.0.0")
+BUILD_NUMBER := $(shell git rev-list --count HEAD 2>/dev/null || echo "0")
+COMMIT_ID := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_TIME := $(shell date "+%Y-%m-%d %H:%M:%S")
+GOMODULE = github.com/OpenNHP/StealthDNS/version
+VERSION_LDFLAGS = -X '$(GOMODULE).Version=$(BASE_VERSION)' -X '$(GOMODULE).BuildNumber=$(BUILD_NUMBER)' -X '$(GOMODULE).CommitID=$(COMMIT_ID)' -X '$(GOMODULE).BuildTime=$(BUILD_TIME)'
+
 all: generate-version-and-build
 
 
@@ -66,8 +75,9 @@ build-sdk-macos:
 
 build:
 	@echo "[StealthDNS] Building package..."
+	@echo "[StealthDNS] Version: $(BASE_VERSION) (Build: $(BUILD_NUMBER), Commit: $(COMMIT_ID))"
 	@mkdir -p ./release/etc/cert ./release/sdk
-	go build -trimpath -ldflags="-w -s" -v -o ./release/stealth-dns ./main.go && \
+	go build -trimpath -ldflags="-w -s $(VERSION_LDFLAGS)" -v -o ./release/stealth-dns ./main.go && \
 	cp ./etc/*.toml ./release/etc/ && \
 	cp ./sdk/nhp-agent.* ./release/sdk/ 2>/dev/null || true && \
 	cp ./etc/cert/rootCA.pem ./release/etc/cert/ 2>/dev/null || true
@@ -102,14 +112,29 @@ ui-init:
 
 ui-build:
 	@echo "[StealthDNS UI] Building UI package..."
+	@echo "[StealthDNS UI] Version: $(BASE_VERSION) (Build: $(BUILD_NUMBER), Commit: $(COMMIT_ID))"
 	@rm -rf ui/build/bin
+	@# Update version in wails.json
+	@sed -i.bak 's/"productVersion": "[^"]*"/"productVersion": "$(BASE_VERSION)"/' ui/wails.json 2>/dev/null || \
+	 sed -i '' 's/"productVersion": "[^"]*"/"productVersion": "$(BASE_VERSION)"/' ui/wails.json 2>/dev/null || true
+	@rm -f ui/wails.json.bak
+	@# Update version in i18n files (simplified - just update the base version)
+	@sed -i.bak 's/version: '\''版本 [^'\'']*'\''/version: '\''版本 $(BASE_VERSION)'\''/' ui/frontend/src/i18n/index.ts 2>/dev/null || \
+	 sed -i '' 's/version: '\''版本 [^'\'']*'\''/version: '\''版本 $(BASE_VERSION)'\''/' ui/frontend/src/i18n/index.ts 2>/dev/null || true
+	@sed -i.bak 's/version: '\''Version [^'\'']*'\''/version: '\''Version $(BASE_VERSION)'\''/' ui/frontend/src/i18n/index.ts 2>/dev/null || \
+	 sed -i '' 's/version: '\''Version [^'\'']*'\''/version: '\''Version $(BASE_VERSION)'\''/' ui/frontend/src/i18n/index.ts 2>/dev/null || true
+	@sed -i.bak 's/version: '\''バージョン [^'\'']*'\''/version: '\''バージョン $(BASE_VERSION)'\''/' ui/frontend/src/i18n/index.ts 2>/dev/null || \
+	 sed -i '' 's/version: '\''バージョン [^'\'']*'\''/version: '\''バージョン $(BASE_VERSION)'\''/' ui/frontend/src/i18n/index.ts 2>/dev/null || true
+	@rm -f ui/frontend/src/i18n/index.ts.bak
+	@# Set version ldflags for UI build
+	@echo "[StealthDNS UI] Injecting version info: Version=$(BASE_VERSION), Build=$(BUILD_NUMBER), Commit=$(COMMIT_ID), Time=$(BUILD_TIME)"
 ifeq ($(OS_NAME), windows)
 	@WAILS_CMD=$$(command -v wails 2>/dev/null || echo "$(GOBIN)/wails"); \
 	if [ ! -f "$$WAILS_CMD" ] && [ ! -x "$$WAILS_CMD" ]; then \
 		echo "[StealthDNS] Error: wails command not found. Please run 'make check-wails' first."; \
 		exit 1; \
 	fi; \
-	cd ui && PATH="$(GOBIN):$$PATH" $$WAILS_CMD build -platform windows/amd64 -o stealthdns-ui.exe
+	cd ui && PATH="$(GOBIN):$$PATH" $$WAILS_CMD build -ldflags="-X 'stealthdns-ui/version.Version=$(BASE_VERSION)' -X 'stealthdns-ui/version.BuildNumber=$(BUILD_NUMBER)' -X 'stealthdns-ui/version.CommitID=$(COMMIT_ID)' -X 'stealthdns-ui/version.BuildTime=$(BUILD_TIME)'" -platform windows/amd64 -o stealthdns-ui.exe
 	cp ./ui/build/bin/stealthdns-ui.exe ./release/
 else ifeq ($(OS_NAME), darwin)
 	@WAILS_CMD=$$(command -v wails 2>/dev/null); \
@@ -120,18 +145,19 @@ else ifeq ($(OS_NAME), darwin)
 		echo "[StealthDNS] Error: wails command not found at $$WAILS_CMD. Please run 'make check-wails' first."; \
 		exit 1; \
 	fi; \
-	cd ui && PATH="$(GOBIN):$$PATH" $$WAILS_CMD build -platform darwin/universal
+	cd ui && PATH="$(GOBIN):$$PATH" $$WAILS_CMD build -ldflags="-X 'stealthdns-ui/version.Version=$(BASE_VERSION)' -X 'stealthdns-ui/version.BuildNumber=$(BUILD_NUMBER)' -X 'stealthdns-ui/version.CommitID=$(COMMIT_ID)' -X 'stealthdns-ui/version.BuildTime=$(BUILD_TIME)'" -platform darwin/universal
 	rm -rf ./release/stealthdns-ui.app
 	cp -r ./ui/build/bin/stealthdns-ui.app ./release/ 2>/dev/null || \
 		cp ./ui/build/bin/stealthdns-ui ./release/
-	@cd ui/frontend && git checkout wailsjs/ 2>/dev/null || true
+	@# Don't restore wailsjs/ - it contains auto-generated bindings including GetVersion
+	@# cd ui/frontend && git checkout wailsjs/ 2>/dev/null || true
 else
 	@WAILS_CMD=$$(command -v wails 2>/dev/null || echo "$(GOBIN)/wails"); \
 	if [ ! -f "$$WAILS_CMD" ] && [ ! -x "$$WAILS_CMD" ]; then \
 		echo "[StealthDNS] Error: wails command not found. Please run 'make check-wails' first."; \
 		exit 1; \
 	fi; \
-	cd ui && PATH="$(GOBIN):$$PATH" $$WAILS_CMD build -platform linux/amd64
+	cd ui && PATH="$(GOBIN):$$PATH" $$WAILS_CMD build -ldflags="-X 'stealthdns-ui/version.Version=$(BASE_VERSION)' -X 'stealthdns-ui/version.BuildNumber=$(BUILD_NUMBER)' -X 'stealthdns-ui/version.CommitID=$(COMMIT_ID)' -X 'stealthdns-ui/version.BuildTime=$(BUILD_TIME)'" -platform linux/amd64
 	cp ./ui/build/bin/stealthdns-ui ./release/
 endif
 

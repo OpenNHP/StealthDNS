@@ -103,6 +103,11 @@ export interface Translations {
     themeDesc: string
     darkTheme: string
     lightTheme: string
+    versionInfo: string
+    version: string
+    buildNumber: string
+    commitId: string
+    buildTime: string
   }
   // Cipher scheme
   cipherSchemes: {
@@ -235,6 +240,11 @@ const zhCN: Translations = {
     themeDesc: '选择界面主题风格',
     darkTheme: '深色主题',
     lightTheme: '浅色主题',
+    versionInfo: '版本信息',
+    version: '版本',
+    buildNumber: '构建号',
+    commitId: '提交 ID',
+    buildTime: '构建时间',
   },
   cipherSchemes: {
     gmsm: 'GMSM (国密)',
@@ -362,6 +372,11 @@ const enUS: Translations = {
     themeDesc: 'Select interface theme style',
     darkTheme: 'Dark Theme',
     lightTheme: 'Light Theme',
+    versionInfo: 'Version Information',
+    version: 'Version',
+    buildNumber: 'Build Number',
+    commitId: 'Commit ID',
+    buildTime: 'Build Time',
   },
   cipherSchemes: {
     gmsm: 'GMSM (Chinese Standard)',
@@ -486,6 +501,11 @@ const jaJP: Translations = {
     language: 'インターフェース言語',
     languageDesc: 'アプリケーションの表示言語を選択',
     theme: 'テーマ',
+    versionInfo: 'バージョン情報',
+    version: 'バージョン',
+    buildNumber: 'ビルド番号',
+    commitId: 'コミット ID',
+    buildTime: 'ビルド時間',
     themeDesc: 'インターフェーステーマスタイルを選択',
     darkTheme: 'ダークテーマ',
     lightTheme: 'ライトテーマ',
@@ -613,6 +633,11 @@ const koKR: Translations = {
     language: '인터페이스 언어',
     languageDesc: '애플리케이션 표시 언어 선택',
     theme: '테마',
+    versionInfo: '버전 정보',
+    version: '버전',
+    buildNumber: '빌드 번호',
+    commitId: '커밋 ID',
+    buildTime: '빌드 시간',
     themeDesc: '인터페이스 테마 스타일 선택',
     darkTheme: '다크 테마',
     lightTheme: '라이트 테마',
@@ -740,6 +765,11 @@ const deDE: Translations = {
     language: 'Sprache',
     languageDesc: 'Anzeigesprache der Anwendung auswählen',
     theme: 'Design',
+    versionInfo: 'Versionsinformationen',
+    version: 'Version',
+    buildNumber: 'Build-Nummer',
+    commitId: 'Commit-ID',
+    buildTime: 'Build-Zeit',
     themeDesc: 'Interface-Design auswählen',
     darkTheme: 'Dunkles Design',
     lightTheme: 'Helles Design',
@@ -867,6 +897,11 @@ const frFR: Translations = {
     language: 'Langue de l\'interface',
     languageDesc: 'Sélectionner la langue d\'affichage',
     theme: 'Thème',
+    versionInfo: 'Informations de version',
+    version: 'Version',
+    buildNumber: 'Numéro de build',
+    commitId: 'ID de commit',
+    buildTime: 'Heure de build',
     themeDesc: 'Sélectionner le style du thème',
     darkTheme: 'Thème sombre',
     lightTheme: 'Thème clair',

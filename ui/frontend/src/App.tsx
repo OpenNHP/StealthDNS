@@ -34,6 +34,13 @@ interface SystemDNSInfo {
   isProxyActive: boolean
 }
 
+interface VersionInfo {
+  version: string
+  buildNumber: string
+  commitId: string
+  buildTime: string
+}
+
 // Wails runtime types
 declare global {
   interface Window {
@@ -59,6 +66,8 @@ declare global {
           ClearLogFile: (filename: string) => Promise<void>
           // System DNS information
           GetSystemDNS: () => Promise<SystemDNSInfo>
+          GetVersion: () => Promise<string>
+          GetVersionInfo: () => Promise<VersionInfo>
         }
       }
     }

@@ -17,10 +17,28 @@ export function TitleBar({ onMinimize, onQuit }: TitleBarProps) {
   const { t } = useLanguage()
   const [isMac, setIsMac] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
+  const [version, setVersion] = useState<string>(t.app.version)
 
   useEffect(() => {
     setIsMac(isMacOS())
-  }, [])
+    // Get actual version from backend (includes build number if available)
+    const fetchVersion = async () => {
+      try {
+        if (window.go?.main?.App?.GetVersion) {
+          const v = await window.go.main.App.GetVersion()
+          // Get the version prefix from i18n (e.g., "版本", "Version", "バージョン")
+          const versionPrefix = t.app.version.split(' ')[0]
+          // Display: "版本 1.0.0+123" or "Version 1.0.0+123"
+          setVersion(`${versionPrefix} ${v}`)
+        }
+      } catch (err) {
+        console.error('Failed to get version:', err)
+        // Fallback to i18n version if GetVersion fails
+        setVersion(t.app.version)
+      }
+    }
+    fetchVersion()
+  }, [t.app.version])
 
   // Toggle maximize/restore
   const handleToggleMaximize = () => {
@@ -60,6 +78,7 @@ export function TitleBar({ onMinimize, onQuit }: TitleBarProps) {
           <text x="50" y="58" textAnchor="middle" fill="#fff" fontSize="24" fontWeight="bold" fontFamily="monospace">D</text>
         </svg>
         <span className="title-bar-text">{t.app.title}</span>
+        <span className="title-bar-version">{version}</span>
       </div>
       
       <div className="title-bar-controls">
