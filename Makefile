@@ -47,8 +47,9 @@ build-sdk-linux:
 		go build -a -trimpath -buildmode=c-shared -ldflags="-w -s" -v \
 		-o ../../../sdk/nhp-agent.so ./agent/main/main.go ./agent/main/export.go
 	@echo "[StealthDNS] Linux SDK built successfully!"
-	@cd $(OPENNHP_DIR)/nhp && git checkout go.mod go.sum 2>/dev/null || true
-	@cd $(OPENNHP_DIR)/endpoints && git checkout go.mod go.sum 2>/dev/null || true
+	@cd $(OPENNHP_DIR)/nhp && git restore go.mod go.sum 2>/dev/null || git checkout go.mod go.sum 2>/dev/null || true
+	@cd $(OPENNHP_DIR)/endpoints && git restore go.mod go.sum 2>/dev/null || git checkout go.mod go.sum 2>/dev/null || true
+	@cd $(OPENNHP_DIR) && git reset --hard HEAD 2>/dev/null || true
 
 build-sdk-macos:
 	@echo "[StealthDNS] Building macOS SDK (nhp-agent.dylib)..."
@@ -59,8 +60,9 @@ build-sdk-macos:
 		go build -a -trimpath -buildmode=c-shared -ldflags="-w -s" -v \
 		-o ../../../sdk/nhp-agent.dylib ./agent/main/main.go ./agent/main/export.go
 	@echo "[StealthDNS] macOS SDK built successfully!"
-	@cd $(OPENNHP_DIR)/nhp && git checkout go.mod go.sum 2>/dev/null || true
-	@cd $(OPENNHP_DIR)/endpoints && git checkout go.mod go.sum 2>/dev/null || true
+	@cd $(OPENNHP_DIR)/nhp && git restore go.mod go.sum 2>/dev/null || git checkout go.mod go.sum 2>/dev/null || true
+	@cd $(OPENNHP_DIR)/endpoints && git restore go.mod go.sum 2>/dev/null || git checkout go.mod go.sum 2>/dev/null || true
+	@cd $(OPENNHP_DIR) && git reset --hard HEAD 2>/dev/null || true
 
 build:
 	@echo "[StealthDNS] Building package..."
