@@ -13,9 +13,9 @@ for /f %%i in ('git rev-list --count HEAD 2^>nul') do set BUILD_NUMBER=%%i
 if "%BUILD_NUMBER%"=="" set BUILD_NUMBER=0
 for /f %%i in ('git rev-parse --short HEAD 2^>nul') do set COMMIT_ID=%%i
 if "%COMMIT_ID%"=="" set COMMIT_ID=unknown
-for /f "tokens=1-2 delims= " %%a in ('echo %date% %time%') do set BUILD_TIME=%%a %%b
+for /f "tokens=*" %%a in ('powershell -Command "Get-Date -Format 'yyyy-MM-dd_HH:mm:ss'"') do set BUILD_TIME=%%a
 set GOMODULE=github.com/OpenNHP/StealthDNS/version
-set "VERSION_LDFLAGS=-X %GOMODULE%.Version=%BASE_VERSION% -X %GOMODULE%.BuildNumber=%BUILD_NUMBER% -X %GOMODULE%.CommitID=%COMMIT_ID%"
+set "VERSION_LDFLAGS=-X %GOMODULE%.Version=%BASE_VERSION% -X %GOMODULE%.BuildNumber=%BUILD_NUMBER% -X %GOMODULE%.CommitID=%COMMIT_ID% -X %GOMODULE%.BuildTime=%BUILD_TIME%"
 
 if "%1"=="ui" goto :buildui
 if "%1"=="full" goto :buildfull
@@ -97,7 +97,7 @@ cd ..
 
 echo [StealthDNS] Running wails build...
 echo [StealthDNS UI] Injecting version info: Version=%BASE_VERSION%, Build=%BUILD_NUMBER%, Commit=%COMMIT_ID%
-set "UI_LDFLAGS=-X stealthdns-ui/version.Version=%BASE_VERSION% -X stealthdns-ui/version.BuildNumber=%BUILD_NUMBER% -X stealthdns-ui/version.CommitID=%COMMIT_ID%"
+set "UI_LDFLAGS=-X stealthdns-ui/version.Version=%BASE_VERSION% -X stealthdns-ui/version.BuildNumber=%BUILD_NUMBER% -X stealthdns-ui/version.CommitID=%COMMIT_ID% -X stealthdns-ui/version.BuildTime=%BUILD_TIME%"
 call wails build -ldflags="%UI_LDFLAGS%" -platform windows/amd64
 IF %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
