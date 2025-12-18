@@ -165,11 +165,11 @@ ui-dev:
 	@echo "[StealthDNS UI] Starting development mode..."
 	cd ui && wails dev
 
-# 完整构建：DNS 服务 + UI
+
 full: all ui
 	@echo "[StealthDNS] Full build completed!"
 
-# 清理
+
 clean:
 	@echo "[StealthDNS] Cleaning..."
 	git clean -df release

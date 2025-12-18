@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -106,14 +107,14 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		fmt.Println(os.Stderr, err)
+		log.Println(os.Stderr, err)
 	}
 }
 
 func runApp() error {
-	fmt.Println("Stealth DNS starting")
+	log.Println("Stealth DNS starting")
 	if !isAdminPermission() {
-		fmt.Println("Insufficient privileges detected. This application must be executed with administrator/root permissions. Please relaunch with elevated rights.")
+		log.Println("Insufficient privileges detected. This application must be executed with administrator/root permissions. Please relaunch with elevated rights.")
 		if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
 			time.Sleep(3 * time.Second)
 			os.Exit(0)
@@ -128,9 +129,14 @@ func runApp() error {
 
 	// Clean up any residual stop signal file
 	stopFilePath := filepath.Join(exeDirPath, ".stealth-dns-stop")
-	fmt.Printf("StealthDNS exe path: %s\n", exeFilePath)
-	fmt.Printf("StealthDNS stop signal file path: %s\n", stopFilePath)
+	log.Printf("StealthDNS exe path: %s\n", exeFilePath)
+	log.Printf("StealthDNS stop signal file path: %s\n", stopFilePath)
 	os.Remove(stopFilePath)
+
+	err = cert.Install(false)
+	if err != nil {
+		log.Printf("Installation of the root certificate [rootCA.pem] failed: %v\n", err)
+	}
 
 	p := &dns.ProxyService{}
 	err = p.Start(exeDirPath, 4)
@@ -154,7 +160,7 @@ func runApp() error {
 			select {
 			case <-ticker.C:
 				if _, err := os.Stat(stopFilePath); err == nil {
-					fmt.Println("Stop signal file detected, gracefully shutting down...")
+					log.Println("Stop signal file detected, gracefully shutting down...")
 					os.Remove(stopFilePath)
 					stopCh <- struct{}{}
 					return
@@ -168,9 +174,9 @@ func runApp() error {
 	// Wait for termination signal
 	select {
 	case <-termCh:
-		fmt.Println("Received system termination signal")
+		log.Println("Received system termination signal")
 	case <-stopCh:
-		fmt.Println("Received stop request")
+		log.Println("Received stop request")
 	}
 
 	p.Stop()
@@ -191,7 +197,7 @@ func isAdminPermission() bool {
 	case "linux":
 		return os.Geteuid() == 0
 	default:
-		fmt.Println(runtime.GOOS, " operating system is not supported; unable to create a DNS handler.")
+		log.Println(runtime.GOOS, " operating system is not supported; unable to create a DNS handler.")
 		return false
 	}
 }
