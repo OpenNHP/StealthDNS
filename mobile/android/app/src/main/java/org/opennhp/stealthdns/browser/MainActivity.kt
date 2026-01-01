@@ -44,20 +44,27 @@ class MainActivity : AppCompatActivity() {
     private var currentPageIsNhp = false
     private var nhpInitialized = false
     
-    // Track URLs loaded via NHP knock (to handle back/forward navigation)
-    private val nhpLoadedUrls = mutableSetOf<String>()
+    // Map: real URL (with resolved host) -> original NHP URL (with .nhp domain)
+    // Used to restore NHP display URL when navigating back/forward
+    private val nhpUrlMapping = mutableMapOf<String, String>()
+    
+    // Current original NHP URL being displayed (to show in address bar instead of real URL)
+    private var currentNhpDisplayUrl: String? = null
     
     // Tab management
     data class BrowserTab(
         val id: Int,
         var title: String = "New Tab",
-        var url: String = "https://www.baidu.com",
+        var url: String = "https://demo.nhp",
         var isNhp: Boolean = false
     )
     
     private val tabs = mutableListOf<BrowserTab>()
     private var currentTabIndex = 0
     private var tabIdCounter = 0
+
+    // Pending URL to load after NHP initialization
+    private var pendingDefaultUrl: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,19 +76,15 @@ class MainActivity : AppCompatActivity() {
             setupWebView()
             setupListeners()
             
-            // Initialize NHP in background
-            initializeNHPCoreAsync()
-            
             // Create first tab
             createNewTab()
             
             // Handle intent or load default page
             val intentUrl = intent?.data?.toString()
-            if (!intentUrl.isNullOrEmpty()) {
-                loadUrl(intentUrl)
-            } else {
-                loadUrl("https://www.baidu.com")
-            }
+            val urlToLoad = if (!intentUrl.isNullOrEmpty()) intentUrl else "https://demo.nhp"
+            
+            // Initialize NHP in background and load URL after initialization
+            initializeNHPCoreAsync(urlToLoad)
             
         } catch (e: Exception) {
             Log.e(TAG, "Error in onCreate", e)
@@ -96,7 +99,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun initializeNHPCoreAsync() {
+    private fun initializeNHPCoreAsync(urlToLoadAfterInit: String) {
+        // Show initialization progress
+        runOnUiThread {
+            nhpIndicator?.visibility = View.VISIBLE
+            nhpStatusText?.text = "Initializing NHP..."
+            progressBar?.visibility = View.VISIBLE
+        }
+        
         Thread {
             try {
                 val workDir = filesDir.absolutePath
@@ -117,9 +127,20 @@ class MainActivity : AppCompatActivity() {
                 nhpInitialized = true
                 Log.d(TAG, "NHP initialized successfully")
                 
+                // Now load the default URL on main thread
+                runOnUiThread {
+                    loadUrl(urlToLoadAfterInit)
+                }
+                
             } catch (e: Exception) {
                 Log.e(TAG, "NHP initialization failed", e)
                 nhpInitialized = false
+                
+                // Still try to load URL (will show error for NHP domains)
+                runOnUiThread {
+                    nhpStatusText?.text = "NHP initialization failed"
+                    loadUrl(urlToLoadAfterInit)
+                }
             }
         }.start()
     }
@@ -235,7 +256,16 @@ class MainActivity : AppCompatActivity() {
                     }
                     
                     // For normal HTTP/HTTPS URLs, let WebView handle them
-                    currentPageIsNhp = false
+                    // Only clear NHP status if user is navigating away (not internal redirect)
+                    // Check if this is a user-initiated navigation vs server redirect
+                    if (!currentPageIsNhp) {
+                        // Not in NHP mode, just let WebView handle
+                        return false
+                    }
+                    
+                    // If current page is NHP protected, this might be a server redirect
+                    // Keep NHP status and let WebView handle the redirect
+                    Log.d(TAG, "NHP page redirect/navigation: $url, keeping NHP status")
                     return false
                 }
                 
@@ -301,10 +331,20 @@ class MainActivity : AppCompatActivity() {
                 progressBar?.visibility = View.VISIBLE
                 swipeRefresh?.isRefreshing = true
                 url?.let {
-                    urlEditText?.setText(it)
-                    
                     // Check if this URL was loaded via NHP knock (for back/forward navigation)
-                    currentPageIsNhp = nhpLoadedUrls.contains(it)
+                    val nhpUrl = nhpUrlMapping[it]
+                    if (nhpUrl != null) {
+                        // Restore NHP state when navigating back to NHP page
+                        currentPageIsNhp = true
+                        currentNhpDisplayUrl = nhpUrl
+                        urlEditText?.setText(nhpUrl)
+                    } else if (currentPageIsNhp && currentNhpDisplayUrl != null) {
+                        // Still in NHP mode (e.g., redirect within NHP page)
+                        urlEditText?.setText(currentNhpDisplayUrl)
+                    } else {
+                        urlEditText?.setText(it)
+                    }
+                    
                     updateSecurityIndicator(it)
                 }
             }
@@ -315,11 +355,37 @@ class MainActivity : AppCompatActivity() {
                 swipeRefresh?.isRefreshing = false
                 updateNavigationButtons()
                 
-                // Update current tab info
-                if (tabs.isNotEmpty() && currentTabIndex < tabs.size) {
-                    tabs[currentTabIndex].title = view?.title ?: "New Tab"
-                    tabs[currentTabIndex].url = url ?: "about:blank"
-                    tabs[currentTabIndex].isNhp = currentPageIsNhp
+                url?.let {
+                    // Check if this URL was loaded via NHP knock (for back/forward navigation)
+                    val nhpUrl = nhpUrlMapping[it]
+                    val displayUrl: String
+                    
+                    if (nhpUrl != null) {
+                        // Restore NHP state when navigating back to NHP page
+                        currentPageIsNhp = true
+                        currentNhpDisplayUrl = nhpUrl
+                        displayUrl = nhpUrl
+                    } else if (currentPageIsNhp && currentNhpDisplayUrl != null) {
+                        // Still in NHP mode (e.g., redirect within NHP page)
+                        // Also save this redirected URL to mapping for back/forward navigation
+                        nhpUrlMapping[it] = currentNhpDisplayUrl!!
+                        Log.d(TAG, "Added redirect URL to mapping: $it -> ${currentNhpDisplayUrl}")
+                        displayUrl = currentNhpDisplayUrl!!
+                    } else {
+                        // Normal non-NHP page
+                        currentPageIsNhp = false
+                        currentNhpDisplayUrl = null
+                        displayUrl = it
+                    }
+                    
+                    urlEditText?.setText(displayUrl)
+                    
+                    // Update current tab info
+                    if (tabs.isNotEmpty() && currentTabIndex < tabs.size) {
+                        tabs[currentTabIndex].title = view?.title ?: "New Tab"
+                        tabs[currentTabIndex].url = displayUrl  // Store the display URL (NHP URL)
+                        tabs[currentTabIndex].isNhp = currentPageIsNhp
+                    }
                 }
             }
 
@@ -402,7 +468,7 @@ class MainActivity : AppCompatActivity() {
                         <h1>Page Load Failed</h1>
                         <p>Error: $errorDesc</p>
                         <p class="url">$failedUrl</p>
-                        <button onclick="history.back()">Go Back</button>
+                        <button onclick="window.location.href='https://demo.nhp'">Go Back</button>
                     </body>
                     </html>
                 """.trimIndent()
@@ -470,7 +536,7 @@ class MainActivity : AppCompatActivity() {
         btnHome?.setOnClickListener {
             currentPageIsNhp = false
             nhpIndicator?.visibility = View.GONE
-            loadUrl("https://www.baidu.com")
+            loadUrl("https://demo.nhp")
         }
 
         btnTabs?.setOnClickListener {
@@ -552,7 +618,7 @@ class MainActivity : AppCompatActivity() {
         val newTab = BrowserTab(
             id = tabIdCounter++,
             title = "New Tab",
-            url = "https://www.baidu.com"
+            url = "https://demo.nhp"
         )
         tabs.add(newTab)
         // Don't change currentTabIndex - stay on current tab
@@ -568,7 +634,7 @@ class MainActivity : AppCompatActivity() {
         val newTab = BrowserTab(
             id = tabIdCounter++,
             title = "New Tab",
-            url = "https://www.baidu.com"
+            url = "https://demo.nhp"
         )
         tabs.add(newTab)
         currentTabIndex = tabs.size - 1
@@ -580,7 +646,7 @@ class MainActivity : AppCompatActivity() {
         
         // Load the new tab's URL
         webView?.stopLoading()
-        webView?.loadUrl("https://www.baidu.com")
+        webView?.loadUrl("https://demo.nhp")
         
         updateTabIndicator()
     }
@@ -590,7 +656,7 @@ class MainActivity : AppCompatActivity() {
         val newTab = BrowserTab(
             id = tabIdCounter++,
             title = "New Tab",
-            url = "https://www.baidu.com"
+            url = "https://demo.nhp"
         )
         tabs.add(newTab)
         currentTabIndex = tabs.size - 1
@@ -603,7 +669,7 @@ class MainActivity : AppCompatActivity() {
         
         val currentTab = tabs[currentTabIndex]
         currentTab.title = webView?.title ?: "New Tab"
-        currentTab.url = webView?.url ?: "https://www.baidu.com"
+        currentTab.url = webView?.url ?: "https://demo.nhp"
         currentTab.isNhp = currentPageIsNhp
         
         // Note: We don't use saveState/restoreState as it's unreliable
@@ -625,17 +691,18 @@ class MainActivity : AppCompatActivity() {
         currentPageIsNhp = tab.isNhp
         urlEditText?.setText(tab.url)
         
-        // Check if URL was loaded via NHP
-        if (nhpLoadedUrls.contains(tab.url)) {
+        // Check if URL was loaded via NHP (tab.url is display URL, might be NHP URL)
+        if (tab.isNhp || nhpUrlMapping.containsValue(tab.url)) {
             currentPageIsNhp = true
+            currentNhpDisplayUrl = tab.url
         }
         
-        // Load the URL
+        // Load the URL - if it's an NHP URL, we need to reload via knock
         val url = tab.url
         if (url.isNotEmpty() && url != "about:blank") {
-            webView?.loadUrl(url)
+            loadUrl(url)  // Use loadUrl to handle NHP domains properly
         } else {
-            webView?.loadUrl("https://www.baidu.com")
+            loadUrl("https://demo.nhp")
         }
         
         updateSecurityIndicator(tab.url)
@@ -663,14 +730,17 @@ class MainActivity : AppCompatActivity() {
             // Load the new current tab
             val tab = tabs[currentTabIndex]
             webView?.stopLoading()
-            currentPageIsNhp = tab.isNhp || nhpLoadedUrls.contains(tab.url)
+            currentPageIsNhp = tab.isNhp || nhpUrlMapping.containsValue(tab.url)
+            if (currentPageIsNhp) {
+                currentNhpDisplayUrl = tab.url
+            }
             urlEditText?.setText(tab.url)
             
             val url = tab.url
             if (url.isNotEmpty() && url != "about:blank") {
                 webView?.loadUrl(url)
             } else {
-                webView?.loadUrl("https://www.baidu.com")
+                webView?.loadUrl("https://demo.nhp")
             }
             
             updateSecurityIndicator(tab.url)
@@ -695,7 +765,7 @@ class MainActivity : AppCompatActivity() {
             webView?.clearHistory()
             webView?.clearCache(true)
             android.webkit.CookieManager.getInstance().removeAllCookies(null)
-            nhpLoadedUrls.clear()
+            nhpUrlMapping.clear()
             currentPageIsNhp = false
             nhpIndicator?.visibility = View.GONE
             
@@ -703,7 +773,7 @@ class MainActivity : AppCompatActivity() {
             tabs.clear()
             tabIdCounter = 0
             createNewTab()
-            loadUrl("https://www.baidu.com")
+            loadUrl("https://demo.nhp")
             
             Toast.makeText(this, "Browsing data cleared", Toast.LENGTH_SHORT).show()
         }
@@ -913,11 +983,12 @@ class MainActivity : AppCompatActivity() {
 
         // Reset NHP status when loading new URL
         currentPageIsNhp = false
+        currentNhpDisplayUrl = null
         nhpIndicator?.visibility = View.GONE
 
         // Determine if it's a search query or URL
         if (!url.contains(".") || url.contains(" ")) {
-            url = "https://www.baidu.com/s?wd=" + Uri.encode(url)
+            url = "https://demo.nhp/s?wd=" + Uri.encode(url)
         } else if (!url.startsWith("http://") && !url.startsWith("https://")) {
             url = "https://$url"
         }
@@ -985,9 +1056,14 @@ class MainActivity : AppCompatActivity() {
                         val processedUrl = originalUrl.replace(host, resolvedHost)
                         Log.d(TAG, "Loading processed URL: $processedUrl")
                         
-                        // Mark as NHP protected page and remember this URL
+                        // Mark as NHP protected page
                         currentPageIsNhp = true
-                        nhpLoadedUrls.add(processedUrl)
+                        
+                        // Save mapping: real URL -> original NHP URL (for back/forward navigation)
+                        nhpUrlMapping[processedUrl] = originalUrl
+                        
+                        // Save the original NHP URL to display in address bar
+                        currentNhpDisplayUrl = originalUrl
                         
                         nhpStatusText?.text = "NHP Protection Enabled"
                         nhpIndicator?.visibility = View.VISIBLE
@@ -995,6 +1071,9 @@ class MainActivity : AppCompatActivity() {
                         // Update security icon
                         securityIcon?.setImageResource(R.drawable.ic_shield)
                         securityIcon?.setColorFilter(ContextCompat.getColor(this, R.color.nhp_green))
+                        
+                        // Update address bar to show original NHP URL
+                        urlEditText?.setText(originalUrl)
                         
                         webView?.loadUrl(processedUrl)
                     } else {

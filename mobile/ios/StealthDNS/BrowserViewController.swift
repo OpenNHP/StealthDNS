@@ -30,7 +30,11 @@ class BrowserViewController: UIViewController {
     // MARK: - Properties
     private var currentPageIsNhp = false
     private var progressObservation: NSKeyValueObservation?
-    private var nhpLoadedUrls = Set<String>()
+    // Map: real URL (with resolved host) -> original NHP URL (with .nhp domain)
+    // Used to restore NHP display URL when navigating back/forward
+    private var nhpUrlMapping = [String: String]()
+    // Current original NHP URL being displayed (to show in address bar instead of real URL)
+    private var currentNhpDisplayUrl: String?
     
     // Tab management
     private var tabs: [BrowserTab] = []
@@ -53,13 +57,60 @@ class BrowserViewController: UIViewController {
         setupWebView()
         setupObservers()
         
-        // Create first tab and load home page
+        // Create first tab
         createNewTab()
-        loadURL("https://www.baidu.com")
+        
+        // Load default URL after NHP initialization
+        loadDefaultURLWhenReady()
     }
     
     deinit {
         progressObservation?.invalidate()
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    private func loadDefaultURLWhenReady() {
+        // Check if NHP is already initialized
+        if let appDelegate = UIApplication.shared.delegate as? AppDelegate, appDelegate.nhpInitialized {
+            loadURL("https://demo.nhp")
+            return
+        }
+        
+        // Show loading indicator
+        nhpIndicatorView.isHidden = false
+        nhpStatusLabel.text = "Initializing NHP..."
+        progressView.isHidden = false
+        progressView.progress = 0.1
+        
+        // Wait for NHP initialization with timeout
+        var attempts = 0
+        let maxAttempts = 50 // 5 seconds timeout (50 * 100ms)
+        
+        func checkAndLoad() {
+            if let appDelegate = UIApplication.shared.delegate as? AppDelegate, appDelegate.nhpInitialized {
+                DispatchQueue.main.async { [weak self] in
+                    self?.loadURL("https://demo.nhp")
+                }
+                return
+            }
+            
+            attempts += 1
+            if attempts < maxAttempts {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    checkAndLoad()
+                }
+            } else {
+                // Timeout - try to load anyway (will show error if NHP required)
+                DispatchQueue.main.async { [weak self] in
+                    self?.nhpStatusLabel.text = "NHP initialization timeout"
+                    self?.loadURL("https://demo.nhp")
+                }
+            }
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            checkAndLoad()
+        }
     }
     
     // MARK: - UI Setup
@@ -289,7 +340,7 @@ class BrowserViewController: UIViewController {
         let newTab = BrowserTab(
             id: tabIdCounter,
             title: "New Tab",
-            url: "https://www.baidu.com",
+            url: "https://demo.nhp",
             isNhp: false,
             webViewData: nil
         )
@@ -305,7 +356,7 @@ class BrowserViewController: UIViewController {
         let newTab = BrowserTab(
             id: tabIdCounter,
             title: "New Tab",
-            url: "https://www.baidu.com",
+            url: "https://demo.nhp",
             isNhp: false,
             webViewData: nil
         )
@@ -319,7 +370,7 @@ class BrowserViewController: UIViewController {
         urlTextField.text = ""
         
         webView.stopLoading()
-        if let url = URL(string: "https://www.baidu.com") {
+        if let url = URL(string: "https://demo.nhp") {
             webView.load(URLRequest(url: url))
         }
     }
@@ -330,7 +381,7 @@ class BrowserViewController: UIViewController {
         let newTab = BrowserTab(
             id: tabIdCounter,
             title: "New Tab",
-            url: "https://www.baidu.com",
+            url: "https://demo.nhp",
             isNhp: false,
             webViewData: nil
         )
@@ -360,16 +411,23 @@ class BrowserViewController: UIViewController {
         
         // Stop current loading and load the tab's URL
         webView.stopLoading()
-        currentPageIsNhp = tab.isNhp || nhpLoadedUrls.contains(tab.url)
+        
+        // Check if URL was loaded via NHP (tab.url is display URL, might be NHP URL)
+        if tab.isNhp || nhpUrlMapping.values.contains(tab.url) {
+            currentPageIsNhp = true
+            currentNhpDisplayUrl = tab.url
+        } else {
+            currentPageIsNhp = false
+            currentNhpDisplayUrl = nil
+        }
         urlTextField.text = tab.url
         
-        // Load the URL
+        // Load the URL - use loadURL to handle NHP domains properly
         let urlString = tab.url
-        if !urlString.isEmpty && urlString != "about:blank", let url = URL(string: urlString) {
-            webView.load(URLRequest(url: url))
-            updateSecurityIndicator(for: url)
-        } else if let url = URL(string: "https://www.baidu.com") {
-            webView.load(URLRequest(url: url))
+        if !urlString.isEmpty && urlString != "about:blank" {
+            loadURL(urlString)
+        } else {
+            loadURL("https://demo.nhp")
         }
         
         showToast("Switched to: \(tab.title)")
@@ -394,15 +452,23 @@ class BrowserViewController: UIViewController {
             // Load the new current tab
             let tab = self.tabs[self.currentTabIndex]
             self.webView.stopLoading()
-            self.currentPageIsNhp = tab.isNhp || self.nhpLoadedUrls.contains(tab.url)
+            
+            // Check if URL was loaded via NHP
+            if tab.isNhp || self.nhpUrlMapping.values.contains(tab.url) {
+                self.currentPageIsNhp = true
+                self.currentNhpDisplayUrl = tab.url
+            } else {
+                self.currentPageIsNhp = false
+                self.currentNhpDisplayUrl = nil
+            }
             self.urlTextField.text = tab.url
             
+            // Load the URL - use loadURL to handle NHP domains properly
             let urlString = tab.url
-            if !urlString.isEmpty && urlString != "about:blank", let url = URL(string: urlString) {
-                self.webView.load(URLRequest(url: url))
-                self.updateSecurityIndicator(for: url)
-            } else if let url = URL(string: "https://www.baidu.com") {
-                self.webView.load(URLRequest(url: url))
+            if !urlString.isEmpty && urlString != "about:blank" {
+                self.loadURL(urlString)
+            } else {
+                self.loadURL("https://demo.nhp")
             }
             
             self.showToast("Tab closed, \(self.tabs.count) remaining")
@@ -430,7 +496,7 @@ class BrowserViewController: UIViewController {
     @objc private func homeTapped() {
         currentPageIsNhp = false
         nhpIndicatorView.isHidden = true
-        loadURL("https://www.baidu.com")
+        loadURL("https://demo.nhp")
     }
     
     @objc private func tabsTapped() {
@@ -686,15 +752,16 @@ class BrowserViewController: UIViewController {
             dataStore.removeData(ofTypes: dataTypes, modifiedSince: Date.distantPast) { }
             
             // Reset state
-            self?.nhpLoadedUrls.removeAll()
+            self?.nhpUrlMapping.removeAll()
             self?.currentPageIsNhp = false
+            self?.currentNhpDisplayUrl = nil
             self?.nhpIndicatorView.isHidden = true
             
             // Reset tabs
             self?.tabs.removeAll()
             self?.tabIdCounter = 0
             self?.createNewTab()
-            self?.loadURL("https://www.baidu.com")
+            self?.loadURL("https://demo.nhp")
             
             self?.showToast("Browsing data cleared")
         })
@@ -710,11 +777,12 @@ class BrowserViewController: UIViewController {
         
         // Reset NHP status
         currentPageIsNhp = false
+        currentNhpDisplayUrl = nil
         nhpIndicatorView.isHidden = true
         
         // Check if it's a search query or URL
         if !urlString.contains(".") || urlString.contains(" ") {
-            urlString = "https://www.baidu.com/s?wd=" + (urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")
+            urlString = "https://demo.nhp/s?wd=" + (urlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")
         } else if !urlString.hasPrefix("http://") && !urlString.hasPrefix("https://") {
             urlString = "https://" + urlString
         }
@@ -778,12 +846,21 @@ class BrowserViewController: UIViewController {
         // Replace host in URL and load
         let processedURL = originalURL.replacingOccurrences(of: host, with: resolvedHost)
         currentPageIsNhp = true
-        nhpLoadedUrls.insert(processedURL)
+        
+        // Save mapping: real URL -> original NHP URL (for back/forward navigation)
+        nhpUrlMapping[processedURL] = originalURL
+        
+        // Save the original NHP URL to display in address bar
+        currentNhpDisplayUrl = originalURL
+        
         nhpStatusLabel.text = "NHP Protection Enabled"
         
         // Update security icon
         securityImageView.image = UIImage(systemName: "shield.fill")
         securityImageView.tintColor = nhpGreen
+        
+        // Update address bar to show original NHP URL
+        urlTextField.text = originalURL
         
         if let url = URL(string: processedURL) {
             webView.load(URLRequest(url: url))
@@ -837,8 +914,9 @@ class BrowserViewController: UIViewController {
         guard let url = url else { return }
         
         // Check if this URL was loaded via NHP knock (for back/forward navigation)
-        if nhpLoadedUrls.contains(url.absoluteString) {
+        if let nhpUrl = nhpUrlMapping[url.absoluteString] {
             currentPageIsNhp = true
+            currentNhpDisplayUrl = nhpUrl
         }
         
         if currentPageIsNhp {
@@ -878,10 +956,21 @@ extension BrowserViewController: WKNavigationDelegate {
         progressView.progress = 0.1
         
         if let url = webView.url {
-            urlTextField.text = url.absoluteString
+            let urlString = url.absoluteString
             
-            // Check if this URL was loaded via NHP knock
-            currentPageIsNhp = nhpLoadedUrls.contains(url.absoluteString)
+            // Check if this URL was loaded via NHP knock (for back/forward navigation)
+            if let nhpUrl = nhpUrlMapping[urlString] {
+                // Restore NHP state when navigating back to NHP page
+                currentPageIsNhp = true
+                currentNhpDisplayUrl = nhpUrl
+                urlTextField.text = nhpUrl
+            } else if currentPageIsNhp, let nhpUrl = currentNhpDisplayUrl {
+                // Still in NHP mode (e.g., redirect within NHP page)
+                urlTextField.text = nhpUrl
+            } else {
+                urlTextField.text = urlString
+            }
+            
             updateSecurityIndicator(for: url)
         }
     }
@@ -891,12 +980,34 @@ extension BrowserViewController: WKNavigationDelegate {
         updateNavigationButtons()
         
         if let url = webView.url {
-            urlTextField.text = url.absoluteString
+            let urlString = url.absoluteString
+            let displayUrl: String
+            
+            // Check if this URL was loaded via NHP knock (for back/forward navigation)
+            if let nhpUrl = nhpUrlMapping[urlString] {
+                // Restore NHP state when navigating back to NHP page
+                currentPageIsNhp = true
+                currentNhpDisplayUrl = nhpUrl
+                displayUrl = nhpUrl
+            } else if currentPageIsNhp, let nhpUrl = currentNhpDisplayUrl {
+                // Still in NHP mode (e.g., redirect within NHP page)
+                // Also save this redirected URL to mapping for back/forward navigation
+                nhpUrlMapping[urlString] = nhpUrl
+                print("Added redirect URL to mapping: \(urlString) -> \(nhpUrl)")
+                displayUrl = nhpUrl
+            } else {
+                // Normal non-NHP page
+                currentPageIsNhp = false
+                currentNhpDisplayUrl = nil
+                displayUrl = urlString
+            }
+            
+            urlTextField.text = displayUrl
             
             // Update current tab info
             if !tabs.isEmpty, currentTabIndex < tabs.count {
                 tabs[currentTabIndex].title = webView.title ?? "New Tab"
-                tabs[currentTabIndex].url = url.absoluteString
+                tabs[currentTabIndex].url = displayUrl  // Store the display URL (NHP URL)
                 tabs[currentTabIndex].isNhp = currentPageIsNhp
             }
         }
@@ -983,7 +1094,7 @@ extension BrowserViewController: WKNavigationDelegate {
             <h1>Page Load Failed</h1>
             <p>Error: \(error)</p>
             <p class="url">\(url)</p>
-            <button onclick="location.reload()">Retry</button>
+            <button onclick="window.location.href='https://demo.nhp'">Go Back</button>
         </body>
         </html>
         """
@@ -1011,6 +1122,7 @@ extension BrowserViewController: WKNavigationDelegate {
             // For normal HTTP/HTTPS URLs, let WKWebView handle them
             if navigationAction.navigationType == .linkActivated {
                 currentPageIsNhp = false
+                currentNhpDisplayUrl = nil
             }
             decisionHandler(.allow)
             return
