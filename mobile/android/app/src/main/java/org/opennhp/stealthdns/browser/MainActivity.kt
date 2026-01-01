@@ -44,8 +44,9 @@ class MainActivity : AppCompatActivity() {
     private var currentPageIsNhp = false
     private var nhpInitialized = false
     
-    // Track URLs loaded via NHP knock (to handle back/forward navigation)
-    private val nhpLoadedUrls = mutableSetOf<String>()
+    // Map: real URL (with resolved host) -> original NHP URL (with .nhp domain)
+    // Used to restore NHP display URL when navigating back/forward
+    private val nhpUrlMapping = mutableMapOf<String, String>()
     
     // Current original NHP URL being displayed (to show in address bar instead of real URL)
     private var currentNhpDisplayUrl: String? = null
@@ -255,8 +256,16 @@ class MainActivity : AppCompatActivity() {
                     }
                     
                     // For normal HTTP/HTTPS URLs, let WebView handle them
-                    currentPageIsNhp = false
-                    currentNhpDisplayUrl = null
+                    // Only clear NHP status if user is navigating away (not internal redirect)
+                    // Check if this is a user-initiated navigation vs server redirect
+                    if (!currentPageIsNhp) {
+                        // Not in NHP mode, just let WebView handle
+                        return false
+                    }
+                    
+                    // If current page is NHP protected, this might be a server redirect
+                    // Keep NHP status and let WebView handle the redirect
+                    Log.d(TAG, "NHP page redirect/navigation: $url, keeping NHP status")
                     return false
                 }
                 
@@ -322,13 +331,19 @@ class MainActivity : AppCompatActivity() {
                 progressBar?.visibility = View.VISIBLE
                 swipeRefresh?.isRefreshing = true
                 url?.let {
-                    // If current page is NHP protected, keep showing the NHP URL
-                    val displayUrl = if (currentPageIsNhp && currentNhpDisplayUrl != null) {
-                        currentNhpDisplayUrl!!
+                    // Check if this URL was loaded via NHP knock (for back/forward navigation)
+                    val nhpUrl = nhpUrlMapping[it]
+                    if (nhpUrl != null) {
+                        // Restore NHP state when navigating back to NHP page
+                        currentPageIsNhp = true
+                        currentNhpDisplayUrl = nhpUrl
+                        urlEditText?.setText(nhpUrl)
+                    } else if (currentPageIsNhp && currentNhpDisplayUrl != null) {
+                        // Still in NHP mode (e.g., redirect within NHP page)
+                        urlEditText?.setText(currentNhpDisplayUrl)
                     } else {
-                        it
+                        urlEditText?.setText(it)
                     }
-                    urlEditText?.setText(displayUrl)
                     
                     updateSecurityIndicator(it)
                 }
@@ -341,14 +356,28 @@ class MainActivity : AppCompatActivity() {
                 updateNavigationButtons()
                 
                 url?.let {
-                    // If current page is NHP protected, keep showing the NHP URL
-                    val displayUrl = if (currentPageIsNhp && currentNhpDisplayUrl != null) {
-                        currentNhpDisplayUrl!!
+                    // Check if this URL was loaded via NHP knock (for back/forward navigation)
+                    val nhpUrl = nhpUrlMapping[it]
+                    val displayUrl: String
+                    
+                    if (nhpUrl != null) {
+                        // Restore NHP state when navigating back to NHP page
+                        currentPageIsNhp = true
+                        currentNhpDisplayUrl = nhpUrl
+                        displayUrl = nhpUrl
+                    } else if (currentPageIsNhp && currentNhpDisplayUrl != null) {
+                        // Still in NHP mode (e.g., redirect within NHP page)
+                        // Also save this redirected URL to mapping for back/forward navigation
+                        nhpUrlMapping[it] = currentNhpDisplayUrl!!
+                        Log.d(TAG, "Added redirect URL to mapping: $it -> ${currentNhpDisplayUrl}")
+                        displayUrl = currentNhpDisplayUrl!!
                     } else {
-                        // Clear NHP display URL when navigating to non-NHP page
+                        // Normal non-NHP page
+                        currentPageIsNhp = false
                         currentNhpDisplayUrl = null
-                        it
+                        displayUrl = it
                     }
+                    
                     urlEditText?.setText(displayUrl)
                     
                     // Update current tab info
@@ -439,7 +468,7 @@ class MainActivity : AppCompatActivity() {
                         <h1>Page Load Failed</h1>
                         <p>Error: $errorDesc</p>
                         <p class="url">$failedUrl</p>
-                        <button onclick="history.back()">Go Back</button>
+                        <button onclick="window.location.href='https://demo.nhp'">Go Back</button>
                     </body>
                     </html>
                 """.trimIndent()
@@ -662,17 +691,18 @@ class MainActivity : AppCompatActivity() {
         currentPageIsNhp = tab.isNhp
         urlEditText?.setText(tab.url)
         
-        // Check if URL was loaded via NHP
-        if (nhpLoadedUrls.contains(tab.url)) {
+        // Check if URL was loaded via NHP (tab.url is display URL, might be NHP URL)
+        if (tab.isNhp || nhpUrlMapping.containsValue(tab.url)) {
             currentPageIsNhp = true
+            currentNhpDisplayUrl = tab.url
         }
         
-        // Load the URL
+        // Load the URL - if it's an NHP URL, we need to reload via knock
         val url = tab.url
         if (url.isNotEmpty() && url != "about:blank") {
-            webView?.loadUrl(url)
+            loadUrl(url)  // Use loadUrl to handle NHP domains properly
         } else {
-            webView?.loadUrl("https://demo.nhp")
+            loadUrl("https://demo.nhp")
         }
         
         updateSecurityIndicator(tab.url)
@@ -700,7 +730,10 @@ class MainActivity : AppCompatActivity() {
             // Load the new current tab
             val tab = tabs[currentTabIndex]
             webView?.stopLoading()
-            currentPageIsNhp = tab.isNhp || nhpLoadedUrls.contains(tab.url)
+            currentPageIsNhp = tab.isNhp || nhpUrlMapping.containsValue(tab.url)
+            if (currentPageIsNhp) {
+                currentNhpDisplayUrl = tab.url
+            }
             urlEditText?.setText(tab.url)
             
             val url = tab.url
@@ -732,7 +765,7 @@ class MainActivity : AppCompatActivity() {
             webView?.clearHistory()
             webView?.clearCache(true)
             android.webkit.CookieManager.getInstance().removeAllCookies(null)
-            nhpLoadedUrls.clear()
+            nhpUrlMapping.clear()
             currentPageIsNhp = false
             nhpIndicator?.visibility = View.GONE
             
@@ -1023,9 +1056,11 @@ class MainActivity : AppCompatActivity() {
                         val processedUrl = originalUrl.replace(host, resolvedHost)
                         Log.d(TAG, "Loading processed URL: $processedUrl")
                         
-                        // Mark as NHP protected page and remember this URL
+                        // Mark as NHP protected page
                         currentPageIsNhp = true
-                        nhpLoadedUrls.add(processedUrl)
+                        
+                        // Save mapping: real URL -> original NHP URL (for back/forward navigation)
+                        nhpUrlMapping[processedUrl] = originalUrl
                         
                         // Save the original NHP URL to display in address bar
                         currentNhpDisplayUrl = originalUrl
