@@ -38,6 +38,33 @@ and allows applications to connect.
 
 ---
 
+## 📸 Screenshots
+
+StealthDNS comes with a modern, intuitive desktop UI built with Wails and React.
+
+### Status Panel
+Monitor the DNS proxy service status, control service operations, and quickly access protected demo sites.
+
+| Service Stopped | Service Running |
+|:---:|:---:|
+| ![Status Stopped](./docs/screenshots/status-stopped.png) | ![Status Running](./docs/screenshots/status-running.png) |
+
+### Configuration
+Configure client credentials and NHP server settings with an easy-to-use interface.
+
+| Client Config | Server Config |
+|:---:|:---:|
+| ![Client Config](./docs/screenshots/client-config.png) | ![Server Config](./docs/screenshots/server-config.png) |
+
+### Logs & Settings
+View real-time logs and customize application settings including language preferences.
+
+| Runtime Logs | Settings |
+|:---:|:---:|
+| ![Logs](./docs/screenshots/logs.png) | ![Settings](./docs/screenshots/settings.png) |
+
+---
+
 ## 🧠 How It Works
 
 At a high level:
