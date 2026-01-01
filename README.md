@@ -38,6 +38,22 @@ and allows applications to connect.
 
 ---
 
+## 💻 Supported Platforms
+
+StealthDNS is available on multiple platforms:
+
+| Platform | Type | Description |
+|:---------|:-----|:------------|
+| **Windows** | Desktop | Full-featured GUI with system tray, DNS proxy service |
+| **macOS** | Desktop | Native app bundle with system integration |
+| **Linux** | Desktop | AppImage/binary with desktop environment support |
+| **Android** | Mobile | StealthDNS Browser with integrated NHP WebView |
+| **iOS** | Mobile | StealthDNS Browser with integrated NHP WebView |
+
+> **Note:** On mobile platforms (iOS/Android), system restrictions prevent apps from setting the DNS server to `127.0.0.1`. The StealthDNS Browser app uses a built-in WebView with NHP integration to provide secure access to hidden services.
+
+---
+
 ## 📸 Screenshots
 
 StealthDNS comes with a modern, intuitive desktop UI built with Wails and React.
